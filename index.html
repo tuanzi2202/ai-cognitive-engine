@@ -114,15 +114,15 @@
 
         .top-bar { display: flex; gap: 10px; align-items: center; }
 
-        .model-select-wrapper, .relay-select-wrapper, .system-prompt-select-wrapper { position: relative; }
-        .model-select-wrapper select, .relay-select-wrapper select, .system-prompt-select-wrapper select {
+        .model-select-wrapper, .relay-select-wrapper, .system-prompt-select-wrapper, .image-template-select-wrapper { position: relative; }
+        .model-select-wrapper select, .relay-select-wrapper select, .system-prompt-select-wrapper select, .image-template-select-wrapper select {
             padding: 8px 32px 8px 12px; border-radius: 8px; border: 1px solid var(--border);
             background: var(--surface); color: var(--text); font-size: 13px; font-weight: 500;
             cursor: pointer; appearance: none; -webkit-appearance: none;
             transition: all var(--transition); outline: none; max-width: 220px;
         }
-        .model-select-wrapper select:focus, .relay-select-wrapper select:focus, .system-prompt-select-wrapper select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
-        .model-select-wrapper::after, .relay-select-wrapper::after, .system-prompt-select-wrapper::after {
+        .model-select-wrapper select:focus, .relay-select-wrapper select:focus, .system-prompt-select-wrapper select:focus, .image-template-select-wrapper select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+        .model-select-wrapper::after, .relay-select-wrapper::after, .system-prompt-select-wrapper::after, .image-template-select-wrapper::after {
             content: "▾"; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
             color: var(--text-muted); pointer-events: none; font-size: 12px;
         }
@@ -371,6 +371,15 @@
         .panel-tab:hover { color: var(--text); background: rgba(37,99,235,0.08); }
         .panel-tab.active { color: var(--primary); background: var(--surface); border-color: var(--border); box-shadow: var(--shadow-sm); }
         .panel-note { margin-bottom: 8px; font-size: 12px; color: var(--text-muted); }
+        .template-manager-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.6;
+            padding: 8px 10px;
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+            background: var(--surface-hover);
+        }
 
         .typing-indicator { display: inline-flex; gap: 4px; padding: 4px 0; }
         .typing-indicator span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); animation: typing-bounce 1.4s infinite ease-in-out; }
@@ -701,7 +710,7 @@
             .panel-settings-nav { flex-direction: row; overflow-x: auto; }
             .panel-settings-nav-btn { white-space: nowrap; flex: 0 0 auto; }
             .top-bar { gap: 6px; }
-            .model-select-wrapper select, .relay-select-wrapper select, .system-prompt-select-wrapper select { max-width: 130px; font-size: 12px; }
+            .model-select-wrapper select, .relay-select-wrapper select, .system-prompt-select-wrapper select, .image-template-select-wrapper select { max-width: 130px; font-size: 12px; }
             .scroll-bottom-btn { bottom: 12px; right: 16px; }
             .project-modal { width: 98%; max-height: 92vh; }
         }
@@ -717,6 +726,8 @@
             <div class="top-bar">
                 <div class="relay-select-wrapper"><select id="relay-select"></select></div>
                 <div class="model-select-wrapper"><select id="model-select"></select></div>
+                <div class="image-template-select-wrapper" id="image-template-select-wrap" style="display:none;"><select id="image-template-select" title="绘图提示词模板"></select></div>
+                <button class="icon-btn" id="image-template-manage-btn" onclick="openImageTemplateManager()" title="管理绘图模板" style="display:none;">🧩</button>
                 <div class="system-prompt-select-wrapper"><select id="system-prompt-select" title="系统提示词方案"></select></div>
                 <button class="icon-btn" onclick="toggleTheme()" title="切换主题" id="theme-btn">🌙</button>
                 <button class="icon-btn" onclick="openSettings()" title="设置">⚙️</button><button class="icon-btn" onclick="exportChat()" title="导出对话">📥</button><button class="icon-btn" onclick="exportAllDataBackup()" title="全量备份">🗂️</button>
@@ -990,6 +1001,33 @@
                                 <div class="settings-group" style="margin-bottom:0;"><label>项目上传：总大小上限(MB)</label><div class="range-row"><input type="range" id="set-proj-totalmax" min="1" max="20" step="1" value="5" oninput="document.getElementById('projt-val').innerText=this.value+'MB'"><span class="range-val" id="projt-val">5MB</span></div></div>
                             </div>
                         </section>
+
+                        <section class="settings-card settings-col-12">
+                            <div class="settings-card-header">
+                                <div class="settings-card-icon">🎨</div>
+                                <div>
+                                    <div class="settings-card-title">绘图提示词模板</div>
+                                    <div class="settings-card-desc">默认不使用模板，模板库由你自行维护</div>
+                                </div>
+                            </div>
+                            <div class="settings-card-body">
+                                <div class="settings-group">
+                                    <label>模板库</label>
+                                    <div class="relay-manage-row">
+                                        <select id="set-image-template-select" onchange="switchImagePromptTemplateSettings(this.value)"></select>
+                                        <button type="button" class="btn-secondary" onclick="addImagePromptTemplate()">＋新增</button>
+                                        <button type="button" class="btn-secondary" onclick="removeImagePromptTemplate()">删除</button>
+                                    </div>
+                                </div>
+                                <div class="settings-group"><label>模板名称</label><input type="text" id="set-image-template-name" placeholder="例如：电影感海报 / 电商产品图 / 国风插画"></div>
+                                <div class="settings-group"><label>模板备注（可选）</label><input type="text" id="set-image-template-note" placeholder="例如：偏真实、柔光、高细节"></div>
+                                <div class="settings-group"><label>模板内容</label><textarea id="set-image-template-content" placeholder="示例：电影感海报，超清细节，光影强烈，主体：{{prompt}}" style="min-height:130px"></textarea></div>
+                                <div class="settings-group" style="margin-bottom:0;">
+                                    <label>占位符说明</label>
+                                    <div class="template-manager-hint">在模板里使用 <code>{{prompt}}</code> 或 <code>{{keywords}}</code> 表示“绘图面板输入框里的关键词”。如果模板里不写占位符，系统会自动把关键词追加到模板末尾。</div>
+                                </div>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </div><div class="settings-footer"><span class="settings-help">设置项实时自动保存</span></div>
@@ -1226,6 +1264,8 @@
             // Video defaults (provider-specific relays can override model)
             videoDuration: 5,
             videoAspectRatio: "16:9",
+            imagePromptTemplates: [],
+            activeImagePromptTemplateId: "",
             selectedModels: DEFAULT_SELECTED_MODELS,
             fetchedModels: [],
             activeModelId: DEFAULT_SELECTED_MODELS[0].id,
@@ -1578,6 +1618,59 @@
             return `sp-${index + 1}-${Math.random().toString(36).slice(2, 7)}`;
         }
 
+        function createImagePromptTemplateId(index = 0) {
+            return `imgtpl-${index + 1}-${Math.random().toString(36).slice(2, 7)}`;
+        }
+
+        function normalizeImagePromptTemplate(item, index = 0) {
+            const idRaw = String(item?.id || "").trim();
+            const id = idRaw || createImagePromptTemplateId(index);
+            const nameRaw = String(item?.name || "").trim();
+            const fallbackName = `模板${index + 1}`;
+            const name = nameRaw && !containsMojibake(nameRaw) ? nameRaw : fallbackName;
+            const noteRaw = String(item?.note || "").trim();
+            const note = noteRaw && !containsMojibake(noteRaw) ? noteRaw : "";
+            const contentRaw = item?.content === undefined || item?.content === null ? "" : String(item.content);
+            const content = containsMojibake(contentRaw) ? "" : contentRaw;
+            return { id, name, note, content };
+        }
+
+        function normalizeImagePromptTemplates(rawTemplates) {
+            if (!Array.isArray(rawTemplates) || rawTemplates.length === 0) return [];
+            const ids = new Set();
+            const result = [];
+            rawTemplates.forEach((item, idx) => {
+                const normalized = normalizeImagePromptTemplate(item, idx);
+                if (!normalized.content.trim()) return;
+                if (ids.has(normalized.id)) normalized.id = createImagePromptTemplateId(idx);
+                ids.add(normalized.id);
+                result.push(normalized);
+            });
+            return result;
+        }
+
+        function ensureImagePromptTemplateState() {
+            config.imagePromptTemplates = normalizeImagePromptTemplates(config.imagePromptTemplates);
+            const activeId = String(config.activeImagePromptTemplateId || "").trim();
+            if (!activeId || !config.imagePromptTemplates.find(item => item.id === activeId)) {
+                config.activeImagePromptTemplateId = "";
+            } else {
+                config.activeImagePromptTemplateId = activeId;
+            }
+            return config.imagePromptTemplates;
+        }
+
+        function getImagePromptTemplateById(templateId) {
+            ensureImagePromptTemplateState();
+            const id = String(templateId || "").trim();
+            if (!id) return null;
+            return config.imagePromptTemplates.find(item => item.id === id) || null;
+        }
+
+        function getActiveImagePromptTemplate() {
+            return getImagePromptTemplateById(config.activeImagePromptTemplateId);
+        }
+
         function normalizeSystemPromptProfile(profile, index = 0) {
             const hasPrompt = !!(profile && Object.prototype.hasOwnProperty.call(profile, "prompt"));
             const promptRaw = hasPrompt ? String(profile.prompt ?? "") : DEFAULT_SYSTEM_PROMPT;
@@ -1830,6 +1923,7 @@
             config.fetchedModels = normalizeFetchedModels(config.fetchedModels);
             if (typeof config.systemPrompt !== "string" || containsMojibake(config.systemPrompt)) config.systemPrompt = DEFAULT_SYSTEM_PROMPT;
             ensureSystemPromptState();
+            ensureImagePromptTemplateState();
             if (typeof config.temperature !== "number") config.temperature = 0.7;
             if (typeof config.contextSize !== "number") config.contextSize = 10;
             if (typeof config.imgQuality !== "number") config.imgQuality = 0.8;
@@ -1938,6 +2032,7 @@
         let expandedDirs = new Set();
         let projectEditIndex = -1; // Used to re-edit uploaded project folders
         let settingsRelayEditingIds = { chat: null, image: null, voice: null, video: null };
+        let settingsImageTemplateEditingId = null;
 
         const viewport = document.getElementById("chat-viewport");
         const userInput = document.getElementById("user-input");
@@ -1949,6 +2044,7 @@
         const btnText = document.getElementById("btn-text");
         const relaySelect = document.getElementById("relay-select");
         const modelSelect = document.getElementById("model-select");
+        const imageTemplateSelect = document.getElementById("image-template-select");
         const systemPromptSelect = document.getElementById("system-prompt-select");
         const fileInput = document.getElementById("file-input");
         const dirInput = document.getElementById("dir-input");
@@ -2044,12 +2140,40 @@
             updateModelHint();
         }
 
+        function populateImageTemplateSelect(selectedId = config.activeImagePromptTemplateId) {
+            ensureImagePromptTemplateState();
+            if (!imageTemplateSelect) return;
+            imageTemplateSelect.innerHTML = "";
+
+            const noneOption = document.createElement("option");
+            noneOption.value = "";
+            noneOption.textContent = "不使用模板";
+            imageTemplateSelect.appendChild(noneOption);
+
+            config.imagePromptTemplates.forEach((tpl, idx) => {
+                const option = document.createElement("option");
+                option.value = tpl.id;
+                option.textContent = tpl.name || `模板${idx + 1}`;
+                option.title = tpl.note || tpl.content || "";
+                imageTemplateSelect.appendChild(option);
+            });
+
+            const target = config.imagePromptTemplates.some(item => item.id === selectedId) ? selectedId : "";
+            imageTemplateSelect.value = target;
+            config.activeImagePromptTemplateId = target;
+            imageTemplateSelect.title = target
+                ? `当前模板：${getImagePromptTemplateById(target)?.name || "未命名模板"}`
+                : "当前未使用模板";
+        }
+
         function updateModelHint() {
             if(currentPanel==='image'){
                 const relay=ensureImageRelayModelState(getActiveRelayByType("image"));
                 const activeId=String(relay?.activeModelId || relay?.selectedModels?.[0]?.id || config.imageModel || DEFAULT_IMAGE_MODEL).trim() || DEFAULT_IMAGE_MODEL;
                 const model=(relay?.selectedModels || []).find(m=>m.id===activeId);
-                document.getElementById("model-hint").innerText = `绘图模型: ${model?.name || activeId}`;
+                const activeTemplate=getActiveImagePromptTemplate();
+                const templateLabel=activeTemplate ? ` · 模板: ${activeTemplate.name}` : " · 模板: 无";
+                document.getElementById("model-hint").innerText = `绘图模型: ${model?.name || activeId}${templateLabel}`;
                 return;
             }
             if(currentPanel==='video'){
@@ -2102,9 +2226,9 @@
         function getPanelMeta(panel){
             if(panel==='image'){
                 return {
-                    note:"绘图面板：支持文生图与图生图。",
-                    placeholder:"描述你想生成的图片，支持上传参考图...",
-                    hint:"Enter 生成图片 / Shift+Enter 换行 / 支持图片附件",
+                    note:"绘图面板：支持文生图、图生图，以及自定义提示词模板。",
+                    placeholder:"先选模板（可选），再输入关键词或完整描述...",
+                    hint:"Enter 生成图片 / Shift+Enter 换行 / 顶部可选模板",
                     icon:"🎨",
                     text:"绘图"
                 };
@@ -2204,8 +2328,12 @@
             const uploadBtn=document.querySelector('.upload-btn');
             const uploadDirBtn=document.querySelector('.upload-dir-btn');
             const modelWrap=document.querySelector('.model-select-wrapper');
+            const imageTemplateWrap=document.getElementById("image-template-select-wrap");
+            const imageTemplateManageBtn=document.getElementById("image-template-manage-btn");
             const promptWrap=document.querySelector('.system-prompt-select-wrapper');
             if(modelWrap)modelWrap.style.display=(currentPanel==='chat' || currentPanel==='image')?'block':'none';
+            if(imageTemplateWrap)imageTemplateWrap.style.display=currentPanel==='image'?'block':'none';
+            if(imageTemplateManageBtn)imageTemplateManageBtn.style.display=currentPanel==='image'?'flex':'none';
             if(promptWrap)promptWrap.style.display=currentPanel==='chat'?'block':'none';
             if(currentPanel==='voice'){
                 pendingAttachments=[];
@@ -2224,10 +2352,18 @@
             }
 
             populateRelaySelect();
+            populateImageTemplateSelect(config.activeImagePromptTemplateId);
             if(currentPanel==='chat' || currentPanel==='image')populateModelSelect(currentPanel);
             applyPanelSendButton();
             updateModelHint();
             render(currentPanel);
+        }
+
+        function openImageTemplateManager() {
+            openSettings();
+            switchTab("advanced");
+            const nameInput = document.getElementById("set-image-template-name");
+            if (nameInput) nameInput.focus();
         }
 
         // ══════════════════════════════════════════鈺?
@@ -2881,6 +3017,24 @@
             }
 
             throw lastErr || new Error("Image request failed.");
+        }
+
+        function applyImagePromptTemplate(promptText) {
+            const rawPrompt = String(promptText || "").trim();
+            const activeTemplate = getActiveImagePromptTemplate();
+            if (!activeTemplate || !String(activeTemplate.content || "").trim()) return rawPrompt;
+
+            const templateBody = String(activeTemplate.content || "");
+            const hasPlaceholder = /\{\{\s*(prompt|keywords)\s*\}\}/i.test(templateBody);
+            if (hasPlaceholder) {
+                return templateBody
+                    .replace(/\{\{\s*prompt\s*\}\}/gi, rawPrompt)
+                    .replace(/\{\{\s*keywords\s*\}\}/gi, rawPrompt)
+                    .trim();
+            }
+
+            if (!rawPrompt) return templateBody.trim();
+            return `${templateBody.trim()}\n\n关键词：${rawPrompt}`;
         }
 
         async function generateImagesByCurrentModel(prompt, attachments, signal) {
@@ -3964,7 +4118,7 @@
         // ══════════════════════════════════════════鈺?
         function getPanelWelcomeContent(panel){
             if(panel==="image"){
-                return `<div class="welcome-screen"><div class="welcome-icon">🎨</div><h2>绘图面板已就绪</h2><p>输入提示词，或上传参考图进行图生图。支持并行执行，不影响其他面板任务。</p><div class="quick-prompts"><button class="quick-prompt-btn" onclick="quickSend('赛博朋克城市雨夜，电影级构图，细节丰富')">🌆 赛博城市海报</button><button class="quick-prompt-btn" onclick="quickSend('极简产品摄影，白底，高级打光，4K')">📷 产品视觉图</button><button class="quick-prompt-btn" onclick="quickSend('中国风山水插画，留白，宣纸质感')">🖌️ 国风插画</button></div></div>`;
+                return `<div class="welcome-screen"><div class="welcome-icon">🎨</div><h2>绘图面板已就绪</h2><p>可先在顶部选择提示词模板，再输入关键词；也支持上传参考图进行图生图。支持并行执行，不影响其他面板任务。</p><div class="quick-prompts"><button class="quick-prompt-btn" onclick="quickSend('赛博朋克城市雨夜，电影级构图，细节丰富')">🌆 赛博城市海报</button><button class="quick-prompt-btn" onclick="quickSend('极简产品摄影，白底，高级打光，4K')">📷 产品视觉图</button><button class="quick-prompt-btn" onclick="quickSend('中国风山水插画，留白，宣纸质感')">🖌️ 国风插画</button></div></div>`;
             }
             if(panel==="voice"){
                 return `<div class="welcome-screen"><div class="welcome-icon">🔊</div><h2>语音面板已就绪</h2><p>输入文本即可调用 TTS 生成语音，支持 mp3 / wav / ogg。</p><div class="quick-prompts"><button class="quick-prompt-btn" onclick="quickSend('欢迎来到我们的产品发布会，接下来由我为你介绍核心功能。')">🎙️ 发布会开场白</button><button class="quick-prompt-btn" onclick="quickSend('请把今天的会议纪要在三分钟内向团队同步。')">🗣️ 通知语音</button></div></div>`;
@@ -4082,10 +4236,20 @@
                 return;
             }
 
-            const effectivePrompt=promptText||"基于输入图片生成高质量变体";
-            const userContent=promptText||"（图生图）";
+            const activeTemplate=getActiveImagePromptTemplate();
+            const templatedPrompt=applyImagePromptTemplate(promptText || "");
+            const effectivePrompt=templatedPrompt || promptText || "基于输入图片生成高质量变体";
+            const userContentPrefix=activeTemplate ? `[模板:${activeTemplate.name}] ` : "";
+            const userContent=`${userContentPrefix}${promptText||"（图生图）"}`;
 
-            const userMsg={role:"user",content:userContent,attachments:imageInputs.length>0?[...imageInputs]:undefined,timestamp:Date.now()};
+            const userMsg={
+                role:"user",
+                content:userContent,
+                imagePromptRaw:String(promptText || ""),
+                imageTemplateId:activeTemplate?.id || "",
+                attachments:imageInputs.length>0?[...imageInputs]:undefined,
+                timestamp:Date.now()
+            };
             history.push(userMsg);
             pendingAttachments=[];renderAttachments();
             userInput.value="";autoResize();charCounter.innerText="0";
@@ -4501,7 +4665,15 @@
             const history=getPanelHistory(panel);
             const idx=history.map((m,i)=>m.role==='user'?i:-1).filter(i=>i>=0).pop();
             if(idx===undefined)return;
-            const text=history[idx].content||"";
+            const lastUser=history[idx] || {};
+            let text=lastUser.content||"";
+            if(panel==="image"){
+                if(typeof lastUser.imagePromptRaw==="string"){
+                    text=lastUser.imagePromptRaw;
+                }else{
+                    text=String(text).replace(/^\[模板:[^\]]+\]\s*/,"");
+                }
+            }
             setPanelHistory(panel,history.slice(0,idx));
             saveChatHistory(panel);
             if(panel===currentPanel){
@@ -4540,7 +4712,12 @@
             if(panel===currentPanel){
                 pendingAttachments=restoredAttachments;
                 renderAttachments();
-                userInput.value=msg.content||"";
+                const editText=(panel==="image")
+                    ? (typeof msg.imagePromptRaw==="string"
+                        ? msg.imagePromptRaw
+                        : String(msg.content||"").replace(/^\[模板:[^\]]+\]\s*/,""))
+                    : (msg.content||"");
+                userInput.value=editText;
                 autoResize();
                 charCounter.innerText=userInput.value.length;
                 render(panel);
@@ -4786,6 +4963,135 @@
             fillSystemPromptProfileInputs(nextProfile?.id);
             scheduleSettingsAutoSave(80);
             showToast("已删除当前系统提示词方案");
+        }
+
+        function populateImagePromptTemplateSettingsSelect(selectedId = settingsImageTemplateEditingId) {
+            ensureImagePromptTemplateState();
+            const select = document.getElementById("set-image-template-select");
+            if (!select) return;
+            select.innerHTML = "";
+            if (!config.imagePromptTemplates.length) {
+                const emptyOption = document.createElement("option");
+                emptyOption.value = "";
+                emptyOption.textContent = "暂无模板（点击 +新增）";
+                select.appendChild(emptyOption);
+                select.value = "";
+                settingsImageTemplateEditingId = null;
+                fillImagePromptTemplateSettingsFields("");
+                return;
+            }
+            config.imagePromptTemplates.forEach((item, idx) => {
+                const option = document.createElement("option");
+                option.value = item.id;
+                option.textContent = item.name || `模板${idx + 1}`;
+                option.title = item.note || item.content || "";
+                select.appendChild(option);
+            });
+            const target = config.imagePromptTemplates.some(item => item.id === selectedId)
+                ? selectedId
+                : config.imagePromptTemplates[0].id;
+            select.value = target;
+            settingsImageTemplateEditingId = target;
+            fillImagePromptTemplateSettingsFields(target);
+        }
+
+        function fillImagePromptTemplateSettingsFields(templateId) {
+            ensureImagePromptTemplateState();
+            const template = getImagePromptTemplateById(templateId);
+            const nameInput = document.getElementById("set-image-template-name");
+            const noteInput = document.getElementById("set-image-template-note");
+            const contentInput = document.getElementById("set-image-template-content");
+            if (template) {
+                settingsImageTemplateEditingId = template.id;
+                if (nameInput) nameInput.value = template.name || "";
+                if (noteInput) noteInput.value = template.note || "";
+                if (contentInput) contentInput.value = template.content || "";
+            } else {
+                settingsImageTemplateEditingId = null;
+                if (nameInput) nameInput.value = "";
+                if (noteInput) noteInput.value = "";
+                if (contentInput) contentInput.value = "";
+            }
+        }
+
+        function saveImagePromptTemplateFromSettings(templateId = settingsImageTemplateEditingId) {
+            ensureImagePromptTemplateState();
+            const id = String(templateId || "").trim();
+            if (!id) return;
+            const template = config.imagePromptTemplates.find(item => item.id === id);
+            if (!template) return;
+            const nameInput = document.getElementById("set-image-template-name");
+            const noteInput = document.getElementById("set-image-template-note");
+            const contentInput = document.getElementById("set-image-template-content");
+            if (!nameInput || !contentInput) return;
+
+            const index = config.imagePromptTemplates.findIndex(item => item.id === id);
+            const fallbackName = `模板${index + 1}`;
+            template.name = nameInput.value.trim() || template.name || fallbackName;
+            template.note = noteInput ? noteInput.value.trim() : (template.note || "");
+            template.content = String(contentInput.value || "").trim();
+            if (!template.content) {
+                showToast("模板内容为空，已自动删除当前模板", "warning");
+                config.imagePromptTemplates = config.imagePromptTemplates.filter(item => item.id !== id);
+                if (config.activeImagePromptTemplateId === id) config.activeImagePromptTemplateId = "";
+                settingsImageTemplateEditingId = null;
+                populateImagePromptTemplateSettingsSelect("");
+                populateImageTemplateSelect(config.activeImagePromptTemplateId);
+                updateModelHint();
+                return;
+            }
+            populateImagePromptTemplateSettingsSelect(template.id);
+            populateImageTemplateSelect(config.activeImagePromptTemplateId);
+            updateModelHint();
+        }
+
+        function switchImagePromptTemplateSettings(templateId) {
+            saveImagePromptTemplateFromSettings(settingsImageTemplateEditingId);
+            fillImagePromptTemplateSettingsFields(templateId);
+            scheduleSettingsAutoSave(80);
+        }
+
+        function addImagePromptTemplate() {
+            saveImagePromptTemplateFromSettings(settingsImageTemplateEditingId);
+            ensureImagePromptTemplateState();
+            const nextIndex = config.imagePromptTemplates.length;
+            const template = {
+                id: createImagePromptTemplateId(nextIndex),
+                name: `模板${nextIndex + 1}`,
+                note: "",
+                content: "{{prompt}}"
+            };
+            config.imagePromptTemplates.push(template);
+            settingsImageTemplateEditingId = template.id;
+            populateImagePromptTemplateSettingsSelect(template.id);
+            fillImagePromptTemplateSettingsFields(template.id);
+            const contentInput = document.getElementById("set-image-template-content");
+            if (contentInput) contentInput.focus();
+            scheduleSettingsAutoSave(80);
+            showToast("已新增绘图提示词模板");
+        }
+
+        function removeImagePromptTemplate() {
+            ensureImagePromptTemplateState();
+            if (!config.imagePromptTemplates.length) {
+                showToast("当前没有可删除的模板", "warning");
+                return;
+            }
+            const select = document.getElementById("set-image-template-select");
+            const targetId = String(select?.value || settingsImageTemplateEditingId || "").trim();
+            if (!targetId) {
+                showToast("请选择要删除的模板", "warning");
+                return;
+            }
+            config.imagePromptTemplates = config.imagePromptTemplates.filter(item => item.id !== targetId);
+            if (config.activeImagePromptTemplateId === targetId) config.activeImagePromptTemplateId = "";
+            const nextId = config.imagePromptTemplates[0]?.id || "";
+            settingsImageTemplateEditingId = nextId || null;
+            populateImagePromptTemplateSettingsSelect(nextId);
+            populateImageTemplateSelect(config.activeImagePromptTemplateId);
+            updateModelHint();
+            scheduleSettingsAutoSave(80);
+            showToast("已删除绘图提示词模板");
         }
 
         function bindRelayNameLiveSync(type){
@@ -5077,6 +5383,8 @@
             ensureSystemPromptState();
             populateSystemPromptProfileSelect(config.activeSystemPromptId);
             fillSystemPromptProfileInputs(config.activeSystemPromptId);
+            ensureImagePromptTemplateState();
+            populateImagePromptTemplateSettingsSelect(settingsImageTemplateEditingId || config.activeImagePromptTemplateId || "");
             document.getElementById("set-temperature").value=config.temperature;
             document.getElementById("temp-val").innerText=config.temperature;
             document.getElementById("set-context").value=config.contextSize;
@@ -5131,6 +5439,7 @@
                 }
             });
             saveSystemPromptProfileFromInputs(config.activeSystemPromptId);
+            saveImagePromptTemplateFromSettings(settingsImageTemplateEditingId);
             config.ttsModel=document.getElementById("set-tts-model").value.trim()||DEFAULT_TTS_MODEL;
             config.ttsVoice=document.getElementById("set-tts-voice").value.trim()||DEFAULT_TTS_VOICE;
             config.ttsFormat=(document.getElementById("set-tts-format").value.trim()||DEFAULT_TTS_FORMAT).toLowerCase();
@@ -5155,6 +5464,7 @@
             persistConfig();
             if(refreshUI){
                 populateRelaySelect();
+                populateImageTemplateSelect(config.activeImagePromptTemplateId);
                 if(currentPanel==='chat' || currentPanel==='image')populateModelSelect(currentPanel);
                 switchPanel(currentPanel);
             }
@@ -5211,6 +5521,8 @@
                 ttsFormat:DEFAULT_TTS_FORMAT,
                 videoDuration:5,
                 videoAspectRatio:"16:9",
+                imagePromptTemplates:[],
+                activeImagePromptTemplateId:"",
                 selectedModels:JSON.parse(JSON.stringify(DEFAULT_SELECTED_MODELS)),
                 fetchedModels:[],
                 activeModelId:DEFAULT_SELECTED_MODELS[0].id,
@@ -5271,6 +5583,16 @@
                 showToast(`🔄 已切换至 ${m?(m.name||m.id):modelSelect.value}`);
             }
         });
+        imageTemplateSelect?.addEventListener("change",()=>{
+            ensureImagePromptTemplateState();
+            const nextId=String(imageTemplateSelect.value || "").trim();
+            config.activeImagePromptTemplateId=nextId;
+            persistConfig();
+            updateModelHint();
+            const template=getActiveImagePromptTemplate();
+            if(template)showToast(`🧩 已启用绘图模板：${template.name}`);
+            else showToast("🧩 已切换为不使用模板");
+        });
         systemPromptSelect?.addEventListener("change",()=>{
             const syncSettings=isSettingsOverlayActive();
             activateSystemPromptProfile(systemPromptSelect.value,{persist:true,syncSettings,silent:false});
@@ -5292,6 +5614,7 @@
         ["chat","image","voice","video"].forEach(bindRelayNoteLiveSync);
         bindSettingsAutoSave();
         populateSystemPromptGlobalSelect(config.activeSystemPromptId);
+        populateImageTemplateSelect(config.activeImagePromptTemplateId);
         populateRelaySelect();
         populateModelSelect();
         switchPanel(currentPanel);
