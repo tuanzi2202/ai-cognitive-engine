@@ -229,12 +229,19 @@
         .bubble-attachments img { max-width: 200px; max-height: 150px; border-radius: 8px; cursor: pointer; transition: transform 0.2s; }
         .bubble-attachments img:hover { transform: scale(1.03); }
         .bubble-attachments audio { max-width: 280px; width: 100%; height: 36px; }
+        .bubble-attachments video { max-width: 320px; width: 100%; border-radius: 10px; background: #000; }
         .bubble-image-item { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+        .bubble-video-item { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
         .bubble-image-download {
             border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary);
             font-size: 11px; border-radius: 6px; padding: 4px 10px; cursor: pointer; transition: all 0.15s;
         }
         .bubble-image-download:hover { border-color: var(--primary); color: var(--primary); background: var(--surface-hover); }
+        .bubble-video-download {
+            border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary);
+            font-size: 11px; border-radius: 6px; padding: 4px 10px; cursor: pointer; transition: all 0.15s;
+        }
+        .bubble-video-download:hover { border-color: var(--primary); color: var(--primary); background: var(--surface-hover); }
         .bubble-attach-file { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(255,255,255,0.15); border-radius: 8px; font-size: 12px; }
         .bubble-attach-placeholder { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(255,255,255,0.1); border-radius: 8px; font-size: 11px; opacity: 0.7; }
         .bubble-attach-project { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: rgba(255,255,255,0.15); border-radius: 8px; font-size: 12px; border: 1px solid rgba(255,255,255,0.2); }
@@ -736,6 +743,7 @@
                 <button class="panel-tab active" data-panel="chat" onclick="switchPanel('chat')">💬 对话</button>
                 <button class="panel-tab" data-panel="image" onclick="switchPanel('image')">🎨 绘图</button>
                 <button class="panel-tab" data-panel="voice" onclick="switchPanel('voice')">🔊 语音</button>
+                <button class="panel-tab" data-panel="video" onclick="switchPanel('video')">🎬 视频</button>
             </div>
             <div class="panel-note" id="panel-note">对话面板：支持文本、多模态与项目上下文。</div>
             <div class="attachments-preview" id="attachments-preview"></div>
@@ -790,6 +798,7 @@
                             <button class="panel-settings-nav-btn active" data-panel-settings-nav="chat" onclick="switchPanelSettingsTab('chat')">💬 对话节点</button>
                             <button class="panel-settings-nav-btn" data-panel-settings-nav="image" onclick="switchPanelSettingsTab('image')">🎨 绘图节点</button>
                             <button class="panel-settings-nav-btn" data-panel-settings-nav="voice" onclick="switchPanelSettingsTab('voice')">🔊 语音节点</button>
+                            <button class="panel-settings-nav-btn" data-panel-settings-nav="video" onclick="switchPanelSettingsTab('video')">🎬 视频节点</button>
                         </aside>
                         <div class="panel-settings-content">
                             <section class="settings-card panel-settings-pane active" data-panel-settings-pane="chat">
@@ -892,6 +901,49 @@
                                     <div class="settings-group"><label>语音模型</label><input type="text" id="set-tts-model" placeholder="gpt-4o-mini-tts"></div>
                                     <div class="settings-group"><label>语音角色</label><input type="text" id="set-tts-voice" placeholder="alloy"></div>
                                     <div class="settings-group" style="margin-bottom:0;"><label>语音格式</label><input type="text" id="set-tts-format" placeholder="mp3"></div>
+                                </div>
+                            </section>
+
+                            <section class="settings-card panel-settings-pane" data-panel-settings-pane="video">
+                                <div class="settings-card-header">
+                                    <div class="settings-card-icon">🎬</div>
+                                    <div>
+                                        <div class="settings-card-title">视频面板节点</div>
+                                        <div class="settings-card-desc">文生视频 / 图生视频</div>
+                                    </div>
+                                </div>
+                                <div class="settings-card-body">
+                                    <div class="settings-group">
+                                        <label>视频中转节点</label>
+                                        <div class="relay-manage-row">
+                                            <select id="set-video-relay-select" onchange="switchSettingsRelay('video', this.value)"></select>
+                                            <button type="button" class="btn-secondary" onclick="addRelayNode('video')">＋新增</button>
+                                            <button type="button" class="btn-secondary" onclick="removeRelayNode('video')">删除</button>
+                                        </div>
+                                    </div>
+                                    <div class="settings-group"><label>节点名称</label><input type="text" id="set-video-relay-name" placeholder="例如：视频主节点"></div>
+                                    <div class="settings-group"><label>备注信息</label><input type="text" id="set-video-relay-note" placeholder="例如：Seedance / Vidu / 可灵 / Veo"></div>
+                                    <div class="settings-group">
+                                        <label>提供商</label>
+                                        <select id="set-video-provider" onchange="handleVideoProviderInputChange()">
+                                            <option value="seedance">Seedance</option>
+                                            <option value="vidu">Vidu</option>
+                                            <option value="kling">可灵 (Kling)</option>
+                                            <option value="veo">Veo</option>
+                                        </select>
+                                    </div>
+                                    <div class="settings-group"><label>API 地址</label><input type="text" id="set-video-api-url" placeholder="例如：https://api.evolink.ai/v1 或 https://api.vidu.com"></div>
+                                    <div class="settings-group"><label>API Key</label><input type="password" id="set-video-api-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="按服务商要求填写"></div>
+                                    <div class="settings-group"><label>视频模型</label><input type="text" id="set-video-model" placeholder="seedance-2.0 / viduq3-turbo / kling-v2.6-std / veo31_fast"></div>
+                                    <div class="settings-group"><label>默认时长 (秒)</label><input type="number" id="set-video-duration" min="1" max="30" step="1" value="5"></div>
+                                    <div class="settings-group" style="margin-bottom:0;">
+                                        <label>默认画面比例</label>
+                                        <select id="set-video-aspect">
+                                            <option value="16:9">16:9 (横屏)</option>
+                                            <option value="9:16">9:16 (竖屏)</option>
+                                            <option value="1:1">1:1 (方形)</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </section>
                         </div>
@@ -1036,7 +1088,7 @@
                 voiceApiKey: DEFAULT_VOICE_API_KEY
             }
         ];
-        const RELAY_TYPE_LABELS = { chat: "对话", image: "绘图", voice: "语音" };
+        const RELAY_TYPE_LABELS = { chat: "对话", image: "绘图", voice: "语音", video: "视频" };
         const DEFAULT_CHAT_RELAYS = [
             { id: "chat-relay-default", name: "默认对话节点", apiUrl: DEFAULT_API_URL, apiKey: DEFAULT_API_KEY }
         ];
@@ -1045,6 +1097,12 @@
         ];
         const DEFAULT_VOICE_RELAYS = [
             { id: "voice-relay-default", name: "默认语音节点", apiUrl: DEFAULT_VOICE_API_URL, apiKey: DEFAULT_VOICE_API_KEY }
+        ];
+        const DEFAULT_VIDEO_RELAYS = [
+            { id: "video-relay-seedance", name: "Seedance", note: "EvoLink / OpenAI-style", provider: "seedance", apiUrl: "https://api.evolink.ai/v1", apiKey: "", model: "seedance-2.0" },
+            { id: "video-relay-vidu", name: "Vidu", note: "Official API", provider: "vidu", apiUrl: "https://api.vidu.com", apiKey: "", model: "viduq3-turbo" },
+            { id: "video-relay-kling", name: "可灵 (Kling)", note: "Kling API", provider: "kling", apiUrl: "https://api.klingapi.com", apiKey: "", model: "kling-v2.6-std" },
+            { id: "video-relay-veo", name: "Veo", note: "Veo API Service", provider: "veo", apiUrl: "https://veoapi.org", apiKey: "", model: "veo31_fast" }
         ];
 
         const IGNORE_DIRS = [
@@ -1072,7 +1130,7 @@
             'db', 'sqlite', 'sqlite3',
             'class', 'pyc', 'pyo', 'wasm', 'map'
         ];
-        const PANEL_TYPES = ["chat", "image", "voice"];
+        const PANEL_TYPES = ["chat", "image", "voice", "video"];
         const PANEL_HISTORY_KEY_PREFIX = "agi_history_v5_";
         const LEGACY_HISTORY_KEY = "agi_chat_v5";
 
@@ -1113,7 +1171,8 @@
         const panelHistories = {
             chat: loadPanelHistory("chat"),
             image: loadPanelHistory("image"),
-            voice: loadPanelHistory("voice")
+            voice: loadPanelHistory("voice"),
+            video: loadPanelHistory("video")
         };
 
         function ensurePanelHistory(panel) {
@@ -1136,7 +1195,8 @@
         const panelTaskState = {
             chat: { running: false, controller: null, startTime: 0 },
             image: { running: false, controller: null, startTime: 0 },
-            voice: { running: false, controller: null, startTime: 0 }
+            voice: { running: false, controller: null, startTime: 0 },
+            video: { running: false, controller: null, startTime: 0 }
         };
 
         // Robustness: localStorage may contain invalid JSON; avoid bricking the app.
@@ -1163,15 +1223,20 @@
             ttsModel: DEFAULT_TTS_MODEL,
             ttsVoice: DEFAULT_TTS_VOICE,
             ttsFormat: DEFAULT_TTS_FORMAT,
+            // Video defaults (provider-specific relays can override model)
+            videoDuration: 5,
+            videoAspectRatio: "16:9",
             selectedModels: DEFAULT_SELECTED_MODELS,
             fetchedModels: [],
             activeModelId: DEFAULT_SELECTED_MODELS[0].id,
             chatRelays: JSON.parse(JSON.stringify(DEFAULT_CHAT_RELAYS)),
             imageRelays: JSON.parse(JSON.stringify(DEFAULT_IMAGE_RELAYS)),
             voiceRelays: JSON.parse(JSON.stringify(DEFAULT_VOICE_RELAYS)),
+            videoRelays: JSON.parse(JSON.stringify(DEFAULT_VIDEO_RELAYS)),
             activeChatRelayId: "chat-relay-default",
             activeImageRelayId: "image-relay-default",
-            activeVoiceRelayId: "voice-relay-default"
+            activeVoiceRelayId: "voice-relay-default",
+            activeVideoRelayId: "video-relay-seedance"
         };
 
         function getRelayTypeLabel(type) {
@@ -1181,6 +1246,7 @@
         function getDefaultRelaysByType(type) {
             if (type === "image") return DEFAULT_IMAGE_RELAYS;
             if (type === "voice") return DEFAULT_VOICE_RELAYS;
+            if (type === "video") return DEFAULT_VIDEO_RELAYS;
             return DEFAULT_CHAT_RELAYS;
         }
 
@@ -1355,6 +1421,25 @@
             return relay;
         }
 
+        function getDefaultVideoModelByProvider(provider) {
+            const p = String(provider || "").trim().toLowerCase();
+            if (p === "vidu") return "viduq3-turbo";
+            if (p === "kling") return "kling-v2.6-std";
+            if (p === "veo") return "veo31_fast";
+            return "seedance-2.0";
+        }
+
+        function ensureVideoRelayState(relay) {
+            if (!relay) return null;
+            const providerRaw = String(relay.provider || "").trim().toLowerCase();
+            relay.provider = ["seedance", "vidu", "kling", "veo"].includes(providerRaw) ? providerRaw : "seedance";
+            const rawModel = String(relay.model || "").trim();
+            relay.model = rawModel && !containsMojibake(rawModel) ? rawModel : getDefaultVideoModelByProvider(relay.provider);
+            relay.apiUrl = String(relay.apiUrl || "").trim().replace(/\/+$/, "");
+            relay.apiKey = String(relay.apiKey || "").trim();
+            return relay;
+        }
+
         function ensureRelayModelStateByType(type, relay) {
             if (type === "image") return ensureImageRelayModelState(relay);
             return ensureChatRelayModelState(relay);
@@ -1414,6 +1499,11 @@
                 const selectId = document.getElementById("set-voice-relay-select")?.value;
                 if (selectId) return selectId;
                 return settingsRelayEditingIds.voice || getActiveRelayIdByType("voice");
+            }
+            if (type === "video") {
+                const selectId = document.getElementById("set-video-relay-select")?.value;
+                if (selectId) return selectId;
+                return settingsRelayEditingIds.video || getActiveRelayIdByType("video");
             }
             const selectId = document.getElementById("set-chat-relay-select")?.value;
             if (selectId) return selectId;
@@ -1593,15 +1683,18 @@
             let rawApiUrl = (relay?.apiUrl || relay?.url || "").trim();
             if (type === "image") rawApiUrl = (relay?.apiUrl || relay?.imageApiUrl || relay?.url || "").trim();
             if (type === "voice") rawApiUrl = (relay?.apiUrl || relay?.voiceApiUrl || relay?.url || "").trim();
+            if (type === "video") rawApiUrl = (relay?.apiUrl || relay?.videoApiUrl || relay?.url || "").trim();
 
             let apiUrl;
             if (type === "image") apiUrl = normalizeImageApiUrl(rawApiUrl, chatSeed);
             else if (type === "voice") apiUrl = normalizeVoiceApiUrl(rawApiUrl, chatSeed);
+            else if (type === "video") apiUrl = normalizeChatApiUrl(rawApiUrl, "");
             else apiUrl = normalizeChatApiUrl(rawApiUrl, DEFAULT_API_URL);
 
             let rawApiKey = relay?.apiKey || relay?.key || relay?.chatApiKey || "";
             if (type === "image") rawApiKey = relay?.apiKey || relay?.imageApiKey || relay?.imageKey || relay?.key || "";
             if (type === "voice") rawApiKey = relay?.apiKey || relay?.voiceApiKey || relay?.voiceKey || relay?.key || "";
+            if (type === "video") rawApiKey = relay?.apiKey || relay?.videoApiKey || relay?.videoKey || relay?.key || "";
             const rawNote = (relay?.note || relay?.remark || relay?.memo || "").trim();
             const normalizedRelay = {
                 id: id || createRelayId(type, index),
@@ -1636,6 +1729,12 @@
                 normalizedRelay.activeModelId = selectedIds.includes(maybeActive)
                     ? maybeActive
                     : (selectedIds[0] || normalizedRelay.fetchedModels[0] || DEFAULT_IMAGE_MODEL);
+            } else if (type === "video") {
+                const providerRaw = String(relay?.provider || relay?.videoProvider || "").trim().toLowerCase();
+                const provider = ["seedance", "vidu", "kling", "veo"].includes(providerRaw) ? providerRaw : "seedance";
+                const model = String(relay?.model || relay?.videoModel || "").trim();
+                normalizedRelay.provider = provider;
+                normalizedRelay.model = model;
             }
             return normalizedRelay;
         }
@@ -1658,24 +1757,28 @@
         function getRelaysByType(type) {
             if (type === "image") return Array.isArray(config.imageRelays) ? config.imageRelays : [];
             if (type === "voice") return Array.isArray(config.voiceRelays) ? config.voiceRelays : [];
+            if (type === "video") return Array.isArray(config.videoRelays) ? config.videoRelays : [];
             return Array.isArray(config.chatRelays) ? config.chatRelays : [];
         }
 
         function setRelaysByType(type, relays) {
             if (type === "image") config.imageRelays = relays;
             else if (type === "voice") config.voiceRelays = relays;
+            else if (type === "video") config.videoRelays = relays;
             else config.chatRelays = relays;
         }
 
         function getActiveRelayIdByType(type) {
             if (type === "image") return config.activeImageRelayId;
             if (type === "voice") return config.activeVoiceRelayId;
+            if (type === "video") return config.activeVideoRelayId;
             return config.activeChatRelayId;
         }
 
         function setActiveRelayIdByType(type, relayId) {
             if (type === "image") config.activeImageRelayId = relayId;
             else if (type === "voice") config.activeVoiceRelayId = relayId;
+            else if (type === "video") config.activeVideoRelayId = relayId;
             else config.activeChatRelayId = relayId;
         }
 
@@ -1687,7 +1790,7 @@
         }
 
         function getCurrentPanelRelayType() {
-            return ["chat", "image", "voice"].includes(currentPanel) ? currentPanel : "chat";
+            return ["chat", "image", "voice", "video"].includes(currentPanel) ? currentPanel : "chat";
         }
 
         function getActiveRelay(type = "chat") {
@@ -1738,6 +1841,10 @@
             if (!config.ttsVoice) config.ttsVoice = DEFAULT_TTS_VOICE;
             config.ttsFormat = (config.ttsFormat || DEFAULT_TTS_FORMAT).toLowerCase();
             if (!['mp3', 'wav', 'ogg'].includes(config.ttsFormat)) config.ttsFormat = DEFAULT_TTS_FORMAT;
+            if (typeof config.videoDuration !== "number") config.videoDuration = 5;
+            if (config.videoDuration < 1 || config.videoDuration > 30) config.videoDuration = 5;
+            if (typeof config.videoAspectRatio !== "string") config.videoAspectRatio = "16:9";
+            if (!["16:9", "9:16", "1:1"].includes(config.videoAspectRatio)) config.videoAspectRatio = "16:9";
 
             const legacyApiUrl = normalizeChatApiUrl(config.apiUrl, DEFAULT_API_URL);
             const legacyApiKey = (config.apiKey || DEFAULT_API_KEY).trim();
@@ -1787,20 +1894,28 @@
                     })
                     : [{ id: "voice-relay-default", name: "默认语音节点", apiUrl: legacyVoiceApiUrl, apiKey: legacyVoiceApiKey }]);
 
+            const rawVideoRelays = (Array.isArray(config.videoRelays) && config.videoRelays.length > 0)
+                ? config.videoRelays
+                : JSON.parse(JSON.stringify(DEFAULT_VIDEO_RELAYS));
+
             config.chatRelays = normalizeRelayPool("chat", rawChatRelays, { id: "chat-relay-default", name: "默认对话节点", apiUrl: legacyApiUrl, apiKey: legacyApiKey });
             config.imageRelays = normalizeRelayPool("image", rawImageRelays, { id: "image-relay-default", name: "默认绘图节点", apiUrl: legacyImageApiUrl, apiKey: legacyImageApiKey });
             config.voiceRelays = normalizeRelayPool("voice", rawVoiceRelays, { id: "voice-relay-default", name: "默认语音节点", apiUrl: legacyVoiceApiUrl, apiKey: legacyVoiceApiKey });
+            config.videoRelays = normalizeRelayPool("video", rawVideoRelays, DEFAULT_VIDEO_RELAYS[0]);
 
             if (!config.activeChatRelayId) config.activeChatRelayId = (config.activeRelayId || "").trim();
             if (!config.activeImageRelayId) config.activeImageRelayId = (config.activeRelayId || "").trim();
             if (!config.activeVoiceRelayId) config.activeVoiceRelayId = (config.activeRelayId || "").trim();
+            if (!config.activeVideoRelayId) config.activeVideoRelayId = "";
 
             if (!config.chatRelays.find(relay => relay.id === config.activeChatRelayId)) config.activeChatRelayId = config.chatRelays[0].id;
             if (!config.imageRelays.find(relay => relay.id === config.activeImageRelayId)) config.activeImageRelayId = config.imageRelays[0].id;
             if (!config.voiceRelays.find(relay => relay.id === config.activeVoiceRelayId)) config.activeVoiceRelayId = config.voiceRelays[0].id;
+            if (!config.videoRelays.find(relay => relay.id === config.activeVideoRelayId)) config.activeVideoRelayId = config.videoRelays[0].id;
 
             config.chatRelays.forEach(relay => ensureChatRelayModelState(relay));
             config.imageRelays.forEach(relay => ensureImageRelayModelState(relay));
+            config.videoRelays.forEach(relay => ensureVideoRelayState(relay));
             syncLegacyModelConfigWithRelay(getActiveRelayByType("chat"));
             syncLegacyImageModelConfigWithRelay(getActiveRelayByType("image"));
             applyActiveRelayToLegacyConfig();
@@ -1822,7 +1937,7 @@
         let projectFiles = [];
         let expandedDirs = new Set();
         let projectEditIndex = -1; // Used to re-edit uploaded project folders
-        let settingsRelayEditingIds = { chat: null, image: null, voice: null };
+        let settingsRelayEditingIds = { chat: null, image: null, voice: null, video: null };
 
         const viewport = document.getElementById("chat-viewport");
         const userInput = document.getElementById("user-input");
@@ -1885,6 +2000,7 @@
             persistConfig();
             relaySelect.value = relay.id;
             if (relayType === "chat" || relayType === "image") populateModelSelect(relayType);
+            if (relayType === "video") updateModelHint();
             if (!silent) showToast(`🌐 已切换${getRelayTypeLabel(relayType)}中转：${relay.name}`);
         }
 
@@ -1934,6 +2050,14 @@
                 const activeId=String(relay?.activeModelId || relay?.selectedModels?.[0]?.id || config.imageModel || DEFAULT_IMAGE_MODEL).trim() || DEFAULT_IMAGE_MODEL;
                 const model=(relay?.selectedModels || []).find(m=>m.id===activeId);
                 document.getElementById("model-hint").innerText = `绘图模型: ${model?.name || activeId}`;
+                return;
+            }
+            if(currentPanel==='video'){
+                const relay=ensureVideoRelayState(getActiveRelayByType("video"));
+                const p=String(relay?.provider||"video").toLowerCase();
+                const label=p==="seedance"?"Seedance":p==="vidu"?"Vidu":p==="kling"?"可灵 (Kling)":p==="veo"?"Veo":"视频";
+                const model=relay?.model||"-";
+                document.getElementById("model-hint").innerText = `视频: ${label} · ${model} · ${config.videoDuration||5}s · ${config.videoAspectRatio||"16:9"}`;
                 return;
             }
             if(currentPanel==='voice'){
@@ -1992,6 +2116,15 @@
                     hint:"Enter 合成语音 / Shift+Enter 换行 / 仅文本",
                     icon:"🔊",
                     text:"合成"
+                };
+            }
+            if(panel==='video'){
+                return {
+                    note:"视频面板：输入提示词生成视频，可选上传参考图。",
+                    placeholder:"描述你想生成的视频，支持上传 1 张参考图...",
+                    hint:"Enter 生成视频 / Shift+Enter 换行 / 支持图片附件",
+                    icon:"🎬",
+                    text:"生成"
                 };
             }
             return {
@@ -2056,7 +2189,7 @@
         }
 
         function switchPanel(panel){
-            const target=['chat','image','voice'].includes(panel)?panel:'chat';
+            const target=['chat','image','voice','video'].includes(panel)?panel:'chat';
             currentPanel=target;
             localStorage.setItem("agi_panel_v5",currentPanel);
             document.querySelectorAll('.panel-tab').forEach(tab=>{
@@ -2080,7 +2213,7 @@
                 attachPreview.style.display='none';
                 if(uploadBtn)uploadBtn.style.display='none';
                 if(uploadDirBtn)uploadDirBtn.style.display='none';
-            }else if(currentPanel==='image'){
+            }else if(currentPanel==='image' || currentPanel==='video'){
                 attachPreview.style.display='';
                 if(uploadBtn)uploadBtn.style.display='flex';
                 if(uploadDirBtn)uploadDirBtn.style.display='none';
@@ -2248,6 +2381,45 @@
                 a.click();
                 a.remove();
                 showToast("Cross-origin blocked, opened in a new tab","warning");
+            }
+        }
+
+        async function downloadVideoAttachment(data,name){
+            if(!data||data==='[VIDEO_DATA_STRIPPED]'){showToast("Video data unavailable","warning");return;}
+            if(!isSafeAttachmentUrl(data)){showToast("⚠️ 已阻止不安全的下载链接","error");return;}
+            const filename=sanitizeDownloadFilename(name,"generated-video.mp4");
+            try{
+                if(/^data:/i.test(data)||/^blob:/i.test(data)){
+                    const a=document.createElement('a');
+                    a.href=data;
+                    a.download=filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    showToast(`Downloaded ${filename}`);
+                    return;
+                }
+                const resp=await fetch(data,{mode:'cors'});
+                if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
+                const blob=await resp.blob();
+                const blobUrl=URL.createObjectURL(blob);
+                const a=document.createElement('a');
+                a.href=blobUrl;
+                a.download=filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(()=>URL.revokeObjectURL(blobUrl),5000);
+                showToast(`Downloaded ${filename}`);
+            }catch(e){
+                const a=document.createElement('a');
+                a.href=data;
+                a.target='_blank';
+                a.rel='noopener noreferrer';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                showToast("无法直接下载，已在新标签页打开","warning");
             }
         }
 
@@ -2774,6 +2946,330 @@
                 inputImages: [],
                 signal
             });
+        }
+
+        function normalizeVideoAspectRatio(value, fallback = "16:9") {
+            const v = String(value || "").trim();
+            if (["16:9", "9:16", "1:1"].includes(v)) return v;
+            return fallback;
+        }
+
+        function aspectRatioToVeoOrientation(aspectRatio) {
+            const ar = normalizeVideoAspectRatio(aspectRatio, "16:9");
+            if (ar === "9:16") return "portrait";
+            // Veo API Service only supports landscape/portrait
+            return "landscape";
+        }
+
+        function stripBaseToOrigin(url) {
+            const raw = String(url || "").trim();
+            if (!raw) return "";
+            try {
+                const u = new URL(raw);
+                return u.origin;
+            } catch (e) {
+                return raw.replace(/\/+$/, "");
+            }
+        }
+
+        function resolveRelativeUrl(maybeUrl, baseOrigin) {
+            const raw = String(maybeUrl || "").trim();
+            if (!raw) return "";
+            if (/^(https?:)?\/\//i.test(raw)) return raw;
+            if (raw.startsWith("/")) {
+                const origin = stripBaseToOrigin(baseOrigin);
+                return origin ? `${origin}${raw}` : raw;
+            }
+            return raw;
+        }
+
+        function extractVideoUrlsFromPayload(payload, baseOrigin = "") {
+            const urls = [];
+            const push = (value) => {
+                if (!value) return;
+                if (typeof value === "string") {
+                    const v = resolveRelativeUrl(value, baseOrigin);
+                    if (v && isSafeAttachmentUrl(v)) urls.push(v);
+                    return;
+                }
+                if (value && typeof value === "object") {
+                    push(value.url || value.video_url || value.downloadUrl || value.download_url || value.result || value.output);
+                }
+            };
+
+            // Common places across providers
+            push(payload?.url);
+            push(payload?.video_url);
+            push(payload?.downloadUrl);
+            push(payload?.download_url);
+            push(payload?.result);
+            push(payload?.output);
+
+            if (Array.isArray(payload?.data)) payload.data.forEach(push);
+            if (payload?.data && typeof payload.data === "object") push(payload.data);
+            if (Array.isArray(payload?.results)) payload.results.forEach(push);
+            if (payload?.results && typeof payload.results === "object") push(payload.results);
+            if (Array.isArray(payload?.creations)) payload.creations.forEach(push);
+            if (payload?.creations && typeof payload.creations === "object") push(payload.creations);
+
+            // Deduplicate
+            return Array.from(new Set(urls));
+        }
+
+        function buildSeedanceVideoEndpoints(apiUrl) {
+            const base = normalizeV1BaseUrl(apiUrl, apiUrl || "");
+            const start = `${base}/videos/generations`;
+            const status = (taskId) => `${base}/tasks/${encodeURIComponent(taskId || "")}`;
+            return { base, start, status };
+        }
+
+        function buildViduVideoEndpoints(apiUrl, hasImage) {
+            const raw = String(apiUrl || "").trim().replace(/\/+$/, "");
+            const base = raw.replace(/\/ent\/v2\/.*$/i, "").replace(/\/+$/, "");
+            const start = `${base}/ent/v2/${hasImage ? "img2video" : "text2video"}`;
+            const status = (taskId) => `${base}/ent/v2/tasks/${encodeURIComponent(taskId || "")}/creations`;
+            return { base, start, status };
+        }
+
+        function buildKlingVideoEndpoints(apiUrl, hasImage) {
+            let raw = String(apiUrl || "").trim().replace(/\/+$/, "");
+            raw = raw.replace(/\/v1\/videos\/.*$/i, "");
+            raw = raw.replace(/\/v1$/i, "");
+            const baseV1 = `${raw}/v1`.replace(/\/{2,}/g, "/").replace(":/", "://");
+            const start = `${baseV1}/videos/${hasImage ? "image2video" : "text2video"}`;
+            const status = (taskId) => `${baseV1}/videos/${encodeURIComponent(taskId || "")}`;
+            return { base: raw, baseV1, start, status };
+        }
+
+        function buildVeoVideoEndpoints(apiUrl) {
+            let raw = String(apiUrl || "").trim().replace(/\/+$/, "");
+            raw = raw.replace(/\/api\/v1\/videos\/.*$/i, "");
+            raw = raw.replace(/\/api\/v1$/i, "");
+            const baseApi = `${raw}/api/v1`.replace(/\/{2,}/g, "/").replace(":/", "://");
+            const start = `${baseApi}/videos/generate`;
+            const status = (videoId) => `${baseApi}/videos/${encodeURIComponent(videoId || "")}`;
+            return { baseOrigin: raw, baseApi, start, status };
+        }
+
+        function getTaskStatusText(payload) {
+            const root = payload?.data || payload || {};
+            const s = String(root.status || root.state || root.task_status || root.taskStatus || root.result_status || "").trim().toLowerCase();
+            return s;
+        }
+
+        async function pollJsonWithAbort({ url, headers, signal, timeoutMs = 300000, intervalMs = 4000, initialDelayMs = 4000 }) {
+            const startedAt = Date.now();
+            if (initialDelayMs > 0) await delayWithAbort(initialDelayMs, signal);
+            while (Date.now() - startedAt < timeoutMs) {
+                const response = await fetch(url, { method: "GET", headers, signal });
+                const data = await parseResponseAsJson(response);
+                if (!response.ok) {
+                    throw new Error(`任务查询失败 HTTP ${response.status}: ${JSON.stringify(data).substring(0, 220)}`);
+                }
+                return data;
+            }
+            throw new Error("任务查询超时");
+        }
+
+        async function pollUntilDone({ provider, statusUrl, headers, signal, baseOrigin = "" }) {
+            const startedAt = Date.now();
+            const timeoutMs = 300000;
+            let firstDelay = 5000;
+            if (provider === "vidu") firstDelay = 3000;
+            if (provider === "kling") firstDelay = 5000;
+            if (provider === "veo") firstDelay = 4000;
+            await delayWithAbort(firstDelay, signal);
+
+            while (Date.now() - startedAt < timeoutMs) {
+                const response = await fetch(statusUrl, { method: "GET", headers, signal });
+                const data = await parseResponseAsJson(response);
+                if (!response.ok) {
+                    throw new Error(`任务查询失败 HTTP ${response.status}: ${JSON.stringify(data).substring(0, 220)}`);
+                }
+
+                const status = getTaskStatusText(data);
+                if (["failed", "error", "rejected", "canceled", "cancelled"].includes(status)) {
+                    const message = data?.error?.message || data?.error_message || data?.message || data?.data?.message || "任务失败";
+                    throw new Error(message);
+                }
+
+                // Vidu: state success + creations
+                if (provider === "vidu") {
+                    const state = String(data?.state || data?.data?.state || status).toLowerCase();
+                    if (["success", "succeed", "completed", "done"].includes(state)) {
+                        const urls = extractVideoUrlsFromPayload(data, baseOrigin);
+                        if (urls.length > 0) return urls;
+                        throw new Error("Vidu 任务已完成，但未返回视频 URL");
+                    }
+                    await delayWithAbort(3000, signal);
+                    continue;
+                }
+
+                // Veo: status completed + downloadUrl
+                if (provider === "veo") {
+                    const st = String(data?.data?.status || data?.status || status).toLowerCase();
+                    if (["completed", "success", "succeed", "done"].includes(st)) {
+                        const urls = extractVideoUrlsFromPayload(data, baseOrigin);
+                        if (urls.length > 0) return urls;
+                        throw new Error("Veo 任务已完成，但未返回 downloadUrl");
+                    }
+                    await delayWithAbort(4000, signal);
+                    continue;
+                }
+
+                // Seedance / Kling / generic: try URL extraction + status
+                if (["succeed", "success", "completed", "done"].includes(status)) {
+                    const urls = extractVideoUrlsFromPayload(data, baseOrigin);
+                    if (urls.length > 0) return urls;
+                    throw new Error("任务已完成，但未返回视频 URL");
+                }
+
+                // Still running
+                await delayWithAbort(4000, signal);
+            }
+            throw new Error("任务查询超时");
+        }
+
+        async function generateVideosByCurrentRelay(prompt, attachments, signal) {
+            const relay = ensureVideoRelayState(getActiveRelayByType("video"));
+            if (!relay) throw new Error("No available video relay node found.");
+            if (!relay.apiUrl) throw new Error("当前视频节点缺少 API 地址");
+            if (!relay.apiKey) throw new Error("当前视频节点缺少 API Key");
+
+            const provider = String(relay.provider || "seedance").toLowerCase();
+            const model = String(relay.model || getDefaultVideoModelByProvider(provider)).trim() || getDefaultVideoModelByProvider(provider);
+            const duration = Math.max(1, Math.min(30, parseInt(config.videoDuration || 5)));
+            const aspectRatio = normalizeVideoAspectRatio(config.videoAspectRatio || "16:9");
+            const sourceImages = normalizeInputImages(
+                (attachments || []).filter(a => a.type === "image" && a.data && a.data !== "[IMAGE_DATA_STRIPPED]")
+            );
+            const hasImage = sourceImages.length > 0;
+
+            if (provider === "vidu") {
+                const { base, start, status } = buildViduVideoEndpoints(relay.apiUrl, hasImage);
+                const headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": `Token ${relay.apiKey}`
+                };
+                const payload = hasImage
+                    ? { model, prompt, images: sourceImages.slice(0, 1).map(img => ({ data: img.data })), duration, aspect_ratio: aspectRatio, seed: 0 }
+                    : { model, prompt, duration, aspect_ratio: aspectRatio, seed: 0 };
+                const response = await fetch(start, { method: "POST", headers, body: JSON.stringify(payload), signal });
+                const data = await parseResponseAsJson(response);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(data).substring(0, 220)}`);
+                const taskId = data?.task_id || data?.data?.task_id || data?.id;
+                if (!taskId) throw new Error(`Vidu 未返回 task_id: ${JSON.stringify(data).substring(0, 220)}`);
+                const urls = await pollUntilDone({
+                    provider: "vidu",
+                    statusUrl: status(taskId),
+                    headers,
+                    signal,
+                    baseOrigin: base
+                });
+                return urls.map((u, idx) => ({
+                    type: "video",
+                    name: `vidu-${taskId}-${idx + 1}.mp4`,
+                    data: u,
+                    mime: "video/mp4",
+                    size: 0
+                }));
+            }
+
+            if (provider === "kling") {
+                const { base, baseV1, start, status } = buildKlingVideoEndpoints(relay.apiUrl, hasImage);
+                const headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${relay.apiKey}`
+                };
+                const payload = hasImage
+                    ? { model, prompt, image: sourceImages[0].data, duration, aspect_ratio: aspectRatio, mode: "std" }
+                    : { model, prompt, duration, aspect_ratio: aspectRatio, mode: "std" };
+                const response = await fetch(start, { method: "POST", headers, body: JSON.stringify(payload), signal });
+                const data = await parseResponseAsJson(response);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(data).substring(0, 220)}`);
+                const taskId = data?.task_id || data?.data?.task_id || data?.id;
+                if (!taskId) throw new Error(`Kling 未返回 task_id: ${JSON.stringify(data).substring(0, 220)}`);
+                const urls = await pollUntilDone({
+                    provider: "kling",
+                    statusUrl: status(taskId),
+                    headers,
+                    signal,
+                    baseOrigin: base
+                });
+                return urls.map((u, idx) => ({
+                    type: "video",
+                    name: `kling-${taskId}-${idx + 1}.mp4`,
+                    data: u,
+                    mime: "video/mp4",
+                    size: 0
+                }));
+            }
+
+            if (provider === "veo") {
+                const { baseOrigin, start, status } = buildVeoVideoEndpoints(relay.apiUrl);
+                const headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${relay.apiKey}`
+                };
+                const payload = {
+                    prompt,
+                    model,
+                    orientation: aspectRatioToVeoOrientation(aspectRatio),
+                    seed: 0
+                };
+                if (hasImage) payload.image = sourceImages[0].data;
+                const response = await fetch(start, { method: "POST", headers, body: JSON.stringify(payload), signal });
+                const data = await parseResponseAsJson(response);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(data).substring(0, 220)}`);
+                const videoId = data?.data?.videoId || data?.videoId || data?.id;
+                if (!videoId) throw new Error(`Veo 未返回 videoId: ${JSON.stringify(data).substring(0, 220)}`);
+                const urls = await pollUntilDone({
+                    provider: "veo",
+                    statusUrl: status(videoId),
+                    headers,
+                    signal,
+                    baseOrigin
+                });
+                return urls.map((u, idx) => ({
+                    type: "video",
+                    name: `veo-${videoId}-${idx + 1}.mp4`,
+                    data: u,
+                    mime: "video/mp4",
+                    size: 0
+                }));
+            }
+
+            // Default: Seedance (OpenAI-style tasks)
+            const { base, start, status } = buildSeedanceVideoEndpoints(relay.apiUrl);
+            const headers = {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${relay.apiKey}`
+            };
+            const response = await fetch(start, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ model, prompt }),
+                signal
+            });
+            const data = await parseResponseAsJson(response);
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(data).substring(0, 220)}`);
+            const taskInfo = extractTaskInfoFromResponse(data) || { taskId: data?.task_id || data?.id };
+            const taskId = taskInfo?.taskId;
+            if (!taskId) throw new Error(`Seedance 未返回任务 ID: ${JSON.stringify(data).substring(0, 220)}`);
+            const urls = await pollUntilDone({
+                provider: "seedance",
+                statusUrl: status(taskId),
+                headers,
+                signal,
+                baseOrigin: base
+            });
+            return urls.map((u, idx) => ({
+                type: "video",
+                name: `seedance-${taskId}-${idx + 1}.mp4`,
+                data: u,
+                mime: "video/mp4",
+                size: 0
+            }));
         }
 
         async function requestTextToSpeech({ endpoint, apiKey, model, voice, format, input, signal }) {
@@ -3403,6 +3899,30 @@
                         p.textContent=`🔊 ${a.name||'语音'} (数据已清除)`;
                         attDiv.appendChild(p);
                     }
+                }else if(a.type==='video'){
+                    if(a.data&&a.data!=='[VIDEO_DATA_STRIPPED]'&&isSafeAttachmentUrl(a.data)){
+                        const videoItem=document.createElement('div');
+                        videoItem.className='bubble-video-item';
+                        const video=document.createElement('video');
+                        video.controls=true;
+                        video.preload='metadata';
+                        video.src=a.data;
+                        video.title=a.name||'视频';
+                        videoItem.appendChild(video);
+                        if(allowImageDownload){
+                            const dlBtn=document.createElement('button');
+                            dlBtn.className='bubble-video-download';
+                            dlBtn.textContent='下载';
+                            dlBtn.onclick=()=>downloadVideoAttachment(a.data,a.name);
+                            videoItem.appendChild(dlBtn);
+                        }
+                        attDiv.appendChild(videoItem);
+                    }else{
+                        const p=document.createElement('div');
+                        p.className='bubble-attach-placeholder';
+                        p.textContent=`🎬 ${a.name||'视频'} (数据不可用)`;
+                        attDiv.appendChild(p);
+                    }
                 }else if(a.type==='project'){
                     const d=document.createElement('div');
                     d.className='bubble-attach-project';
@@ -3448,6 +3968,9 @@
             }
             if(panel==="voice"){
                 return `<div class="welcome-screen"><div class="welcome-icon">🔊</div><h2>语音面板已就绪</h2><p>输入文本即可调用 TTS 生成语音，支持 mp3 / wav / ogg。</p><div class="quick-prompts"><button class="quick-prompt-btn" onclick="quickSend('欢迎来到我们的产品发布会，接下来由我为你介绍核心功能。')">🎙️ 发布会开场白</button><button class="quick-prompt-btn" onclick="quickSend('请把今天的会议纪要在三分钟内向团队同步。')">🗣️ 通知语音</button></div></div>`;
+            }
+            if(panel==="video"){
+                return `<div class="welcome-screen"><div class="welcome-icon">🎬</div><h2>视频面板已就绪</h2><p>输入提示词生成视频，也可上传 1 张参考图进行图生视频（不同服务支持能力不同）。</p><div class="quick-prompts"><button class="quick-prompt-btn" onclick="quickSend('电影感航拍：海岸线日落，海浪闪光，慢速推进镜头，真实质感')">🌅 电影航拍</button><button class="quick-prompt-btn" onclick="quickSend('产品广告：一台银色咖啡机在工作台上，柔光，特写，景深')">📺 产品广告</button><button class="quick-prompt-btn" onclick="quickSend('国风：山水云海，水墨晕染动画，镜头缓慢平移')">🖌️ 水墨动效</button></div></div>`;
             }
             return `<div class="welcome-screen"><div class="welcome-icon">🧬</div><h2>仿生认知引擎已就绪</h2><p>输入任何复杂问题，支持拖拽/粘贴图片，📁 上传整个项目目录。</p><div class="quick-prompts"><button class="quick-prompt-btn" onclick="quickSend('如何用第一性原理重新设计教育系统？')">🎓 重新设计教育</button><button class="quick-prompt-btn" onclick="quickSend('为什么大多数创业公司都失败了？')">🚀 创业失败本质</button><button class="quick-prompt-btn" onclick="quickSend('如何从零构建一个有护城河的 AI 产品？')">🤖 AI 产品护城河</button><button class="quick-prompt-btn" onclick="quickSend('人类注意力经济的终局会是什么？')">👁️ 注意力经济终局</button></div></div>`;
         }
@@ -3590,6 +4113,48 @@
             if(currentPanel===panel)render(panel);
         }
 
+        async function handleVideoGenerationSend(promptText){
+            const panel='video';
+            const history=getPanelHistory(panel);
+            const imageInputs=pendingAttachments.filter(a=>a.type==='image');
+            const droppedCount=pendingAttachments.length-imageInputs.length;
+            if(droppedCount>0)showToast(`⚠️ 视频面板仅使用图片附件，已忽略 ${droppedCount} 个非图片附件`,`warning`);
+            if(!promptText&&!imageInputs.length){
+                showToast("⚠️ 请先输入视频提示词或上传参考图","warning");
+                return;
+            }
+
+            const effectivePrompt=promptText||"基于输入图片生成高质量短视频";
+            const userContent=promptText||"（图生视频）";
+
+            const userMsg={role:"user",content:userContent,attachments:imageInputs.length>0?[...imageInputs]:undefined,timestamp:Date.now()};
+            history.push(userMsg);
+            pendingAttachments=[];renderAttachments();
+            userInput.value="";autoResize();charCounter.innerText="0";
+
+            const aiMsg={role:"assistant",content:"🎬 正在生成视频...",reasoning:"",attachments:[],timestamp:Date.now()};
+            history.push(aiMsg);
+            const task=beginPanelTask(panel);
+            if(currentPanel===panel){render(panel);updateMeta(panel);}
+
+            try{
+                const videos=await generateVideosByCurrentRelay(effectivePrompt,userMsg.attachments||[],task.controller.signal);
+                aiMsg.attachments=videos;
+                aiMsg.content=`已生成 ${videos.length} 个视频，可直接播放与下载。`;
+                aiMsg.elapsed=Date.now()-task.startTime;
+                apiUsage++;
+                localStorage.setItem("agi_count_v5",apiUsage);
+                showToast(`✅ 视频生成完成 (${(aiMsg.elapsed/1000).toFixed(1)}s)`);
+            }catch(err){
+                if(err.name==='AbortError'){aiMsg.content+="\n\n⏹️ _已停止_";aiMsg.elapsed=Date.now()-task.startTime;showToast("⏹️ 已停止");}
+                else{aiMsg.content=`⚠️ **视频生成失败**\n\n\`${err.message}\``;showToast("❌ 视频失败","error");}
+            }
+
+            finishPanelTask(panel);
+            saveChatHistory(panel);
+            if(currentPanel===panel)render(panel);
+        }
+
         async function handleVoiceTtsSend(text){
             const panel='voice';
             const history=getPanelHistory(panel);
@@ -3630,6 +4195,7 @@
             const text=userInput.value.trim();
             if(currentPanel==='voice'){await handleVoiceTtsSend(text);return;}
             if(currentPanel==='image'){await handleImageGenerationSend(text);return;}
+            if(currentPanel==='video'){await handleVideoGenerationSend(text);return;}
             if(currentPanel==='chat' && !modelSelect.value){
                 showToast("⚠️ 当前节点没有已激活的可用模型，请到设置中获取并勾选模型","warning");
                 return;
@@ -3724,6 +4290,11 @@
                         return{type:a.type,name:a.name,size:a.size,data:imageData||'[IMAGE_DATA_STRIPPED]'};
                     }
                     if(a.type==='audio')return{type:a.type,name:a.name,size:a.size,mime:a.mime,data:'[AUDIO_DATA_STRIPPED]'};
+                    if(a.type==='video'){
+                        const raw=typeof a.data==='string'?a.data.trim():'';
+                        const kept=/^https?:\/\//i.test(raw)?raw:'';
+                        return{type:a.type,name:a.name,size:a.size,mime:a.mime,data:kept||'[VIDEO_DATA_STRIPPED]'};
+                    }
                     if(a.type==='project')return{type:a.type,name:a.name,size:a.size,fileCount:a.fileCount,totalSize:a.totalSize,data:'[PROJECT_DATA_STRIPPED]'};
                     const textData=typeof a.data==='string' ? (compact ? a.data.substring(0,1200) : a.data.substring(0,5000)) : a.data;
                     return{type:a.type,name:a.name,size:a.size,data:textData};
@@ -4270,6 +4841,17 @@
                     apiKey: "set-voice-api-key"
                 };
             }
+            if(type==="video"){
+                return {
+                    select: "set-video-relay-select",
+                    name: "set-video-relay-name",
+                    note: "set-video-relay-note",
+                    apiUrl: "set-video-api-url",
+                    apiKey: "set-video-api-key",
+                    provider: "set-video-provider",
+                    model: "set-video-model"
+                };
+            }
             return {
                 select: "set-chat-relay-select",
                 name: "set-chat-relay-name",
@@ -4283,7 +4865,27 @@
             const chatSeed = getActiveRelayByType("chat")?.apiUrl || config.apiUrl || DEFAULT_API_URL;
             if (type === "image") return normalizeImageApiUrl(apiUrl, chatSeed);
             if (type === "voice") return normalizeVoiceApiUrl(apiUrl, chatSeed);
+            if (type === "video") return normalizeChatApiUrl(apiUrl, "");
             return normalizeChatApiUrl(apiUrl, DEFAULT_API_URL);
+        }
+
+        function getVideoProviderDefaults(provider) {
+            const p = String(provider || "").trim().toLowerCase();
+            if (p === "vidu") return { apiUrl: "https://api.vidu.com", model: "viduq3-turbo" };
+            if (p === "kling") return { apiUrl: "https://api.klingapi.com", model: "kling-v2.6-std" };
+            if (p === "veo") return { apiUrl: "https://veoapi.org", model: "veo31_fast" };
+            return { apiUrl: "https://api.evolink.ai/v1", model: "seedance-2.0" };
+        }
+
+        function handleVideoProviderInputChange() {
+            const ids = getSettingsRelayFieldIds("video");
+            const provider = document.getElementById(ids.provider)?.value || "seedance";
+            const defaults = getVideoProviderDefaults(provider);
+            const apiUrlInput = document.getElementById(ids.apiUrl);
+            const modelInput = document.getElementById(ids.model);
+            if (apiUrlInput && !apiUrlInput.value.trim()) apiUrlInput.value = defaults.apiUrl;
+            if (modelInput && !modelInput.value.trim()) modelInput.value = defaults.model;
+            scheduleSettingsAutoSave(80);
         }
 
         function saveRelayFromSettings(type, relayId=settingsRelayEditingIds[type]){
@@ -4303,6 +4905,16 @@
             relay.note = noteInput ? noteInput.value.trim() : (relay.note || "");
             relay.apiUrl = normalizeRelayApiUrlByType(type, apiUrlInput.value.trim() || relay.apiUrl);
             relay.apiKey = apiKeyInput.value.trim();
+            if(type==="video"){
+                const providerSelect = ids.provider ? document.getElementById(ids.provider) : null;
+                const modelInput = ids.model ? document.getElementById(ids.model) : null;
+                if(providerSelect) relay.provider = String(providerSelect.value || "").trim().toLowerCase();
+                if(modelInput){
+                    const m=modelInput.value.trim();
+                    relay.model = m || getDefaultVideoModelByProvider(relay.provider);
+                }
+                ensureVideoRelayState(relay);
+            }
             populateSettingsRelaySelect(type, relay.id);
             if(type===getCurrentPanelRelayType())populateRelaySelect();
         }
@@ -4335,10 +4947,19 @@
             const noteInput = document.getElementById(ids.note);
             const apiUrlInput = document.getElementById(ids.apiUrl);
             const apiKeyInput = document.getElementById(ids.apiKey);
+            const providerSelect = ids.provider ? document.getElementById(ids.provider) : null;
+            const modelInput = ids.model ? document.getElementById(ids.model) : null;
             if(nameInput) nameInput.value = relay.name || "";
             if(noteInput) noteInput.value = relay.note || "";
             if(apiUrlInput) apiUrlInput.value = relay.apiUrl || "";
             if(apiKeyInput) apiKeyInput.value = relay.apiKey || "";
+            if(providerSelect){
+                const p=String(relay.provider||"seedance").toLowerCase();
+                providerSelect.value=["seedance","vidu","kling","veo"].includes(p)?p:"seedance";
+            }
+            if(modelInput && type==="video"){
+                modelInput.value = relay.model || getDefaultVideoModelByProvider(relay.provider);
+            }
         }
 
         function switchSettingsRelay(type, relayId){
@@ -4368,6 +4989,8 @@
                 apiUrl: seed.apiUrl,
                 apiKey: seed.apiKey || "",
                 note: seed.note || "",
+                provider: type==="video" ? (seed.provider || "seedance") : undefined,
+                model: type==="video" ? (seed.model || getDefaultVideoModelByProvider(seed.provider || "seedance")) : undefined,
                 selectedModels: (type==="chat" || type==="image")
                     ? JSON.parse(JSON.stringify(
                         seed.selectedModels
@@ -4393,6 +5016,8 @@
             }else if(type==="image"){
                 ensureImageRelayModelState(relay);
                 renderModelList(getModelSearchValue("image"), "image");
+            }else if(type==="video"){
+                ensureVideoRelayState(relay);
             }
             scheduleSettingsAutoSave(80);
             showToast(`Added ${getRelayTypeLabel(type)} relay node`);
@@ -4435,7 +5060,7 @@
         }
 
         function openSettings(){
-            ["chat","image","voice"].forEach(type=>{
+            ["chat","image","voice","video"].forEach(type=>{
                 const activeId = getActiveRelayIdByType(type);
                 populateSettingsRelaySelect(type, activeId);
                 const ids = getSettingsRelayFieldIds(type);
@@ -4445,6 +5070,10 @@
             document.getElementById("set-tts-model").value=config.ttsModel||DEFAULT_TTS_MODEL;
             document.getElementById("set-tts-voice").value=config.ttsVoice||DEFAULT_TTS_VOICE;
             document.getElementById("set-tts-format").value=config.ttsFormat||DEFAULT_TTS_FORMAT;
+            const vd=document.getElementById("set-video-duration");
+            if(vd)vd.value=String(config.videoDuration||5);
+            const va=document.getElementById("set-video-aspect");
+            if(va)va.value=config.videoAspectRatio||"16:9";
             ensureSystemPromptState();
             populateSystemPromptProfileSelect(config.activeSystemPromptId);
             fillSystemPromptProfileInputs(config.activeSystemPromptId);
@@ -4491,10 +5120,10 @@
         function closeSettingsOutside(e){if(e.target===document.getElementById("settings-overlay"))closeSettings();}
         function saveSettings(options={}){
             const { closeAfter=false, silent=true, refreshUI=true } = options || {};
-            ["chat","image","voice"].forEach(type=>{
+            ["chat","image","voice","video"].forEach(type=>{
                 saveRelayFromSettings(type, settingsRelayEditingIds[type]);
             });
-            ["chat","image","voice"].forEach(type=>{
+            ["chat","image","voice","video"].forEach(type=>{
                 const ids = getSettingsRelayFieldIds(type);
                 const selectedId = document.getElementById(ids.select)?.value;
                 if(selectedId && getRelaysByType(type).some(relay=>relay.id===selectedId)){
@@ -4505,12 +5134,16 @@
             config.ttsModel=document.getElementById("set-tts-model").value.trim()||DEFAULT_TTS_MODEL;
             config.ttsVoice=document.getElementById("set-tts-voice").value.trim()||DEFAULT_TTS_VOICE;
             config.ttsFormat=(document.getElementById("set-tts-format").value.trim()||DEFAULT_TTS_FORMAT).toLowerCase();
+            const nextVideoDuration=parseInt(document.getElementById("set-video-duration")?.value);
+            const nextVideoAspect=String(document.getElementById("set-video-aspect")?.value || "").trim();
             const nextTemperature=parseFloat(document.getElementById("set-temperature").value);
             const nextContextSize=parseInt(document.getElementById("set-context").value);
             const nextImgQuality=parseFloat(document.getElementById("set-img-quality").value);
             const nextImgMaxSize=parseInt(document.getElementById("set-img-maxsize").value);
             const nextProjFileMax=parseInt(document.getElementById("set-proj-filemax").value);
             const nextProjTotalMax=parseInt(document.getElementById("set-proj-totalmax").value);
+            if(Number.isFinite(nextVideoDuration))config.videoDuration=nextVideoDuration;
+            if(nextVideoAspect)config.videoAspectRatio=nextVideoAspect;
             if(Number.isFinite(nextTemperature))config.temperature=nextTemperature;
             if(Number.isFinite(nextContextSize))config.contextSize=nextContextSize;
             if(Number.isFinite(nextImgQuality))config.imgQuality=nextImgQuality;
@@ -4576,15 +5209,19 @@
                 ttsModel:DEFAULT_TTS_MODEL,
                 ttsVoice:DEFAULT_TTS_VOICE,
                 ttsFormat:DEFAULT_TTS_FORMAT,
+                videoDuration:5,
+                videoAspectRatio:"16:9",
                 selectedModels:JSON.parse(JSON.stringify(DEFAULT_SELECTED_MODELS)),
                 fetchedModels:[],
                 activeModelId:DEFAULT_SELECTED_MODELS[0].id,
                 chatRelays:JSON.parse(JSON.stringify(DEFAULT_CHAT_RELAYS)),
                 imageRelays:JSON.parse(JSON.stringify(DEFAULT_IMAGE_RELAYS)),
                 voiceRelays:JSON.parse(JSON.stringify(DEFAULT_VOICE_RELAYS)),
+                videoRelays:JSON.parse(JSON.stringify(DEFAULT_VIDEO_RELAYS)),
                 activeChatRelayId:"chat-relay-default",
                 activeImageRelayId:"image-relay-default",
-                activeVoiceRelayId:"voice-relay-default"
+                activeVoiceRelayId:"voice-relay-default",
+                activeVideoRelayId:"video-relay-seedance"
             };
             normalizeConfigStructure();
             persistConfig();
@@ -4651,8 +5288,8 @@
             if(e.ctrlKey&&e.key==='/'){e.preventDefault();userInput.focus();}
         });
 
-        ["chat","image","voice"].forEach(bindRelayNameLiveSync);
-        ["chat","image","voice"].forEach(bindRelayNoteLiveSync);
+        ["chat","image","voice","video"].forEach(bindRelayNameLiveSync);
+        ["chat","image","voice","video"].forEach(bindRelayNoteLiveSync);
         bindSettingsAutoSave();
         populateSystemPromptGlobalSelect(config.activeSystemPromptId);
         populateRelaySelect();
