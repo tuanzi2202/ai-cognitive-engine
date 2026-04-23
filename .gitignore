@@ -1,0 +1,19 @@
+# OS / misc
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+
+# Backups / temp
+*.bak
+*.bak_*
+*.tmp
+*.log
+
+# Common build artifacts (in case you add tooling later)
+node_modules/
+dist/
+build/
