@@ -1003,13 +1003,13 @@
                         </section>
 
                         <section class="settings-card settings-col-12">
-                            <div class="settings-card-header">
-                                <div class="settings-card-icon">🎨</div>
-                                <div>
-                                    <div class="settings-card-title">绘图提示词模板</div>
-                                    <div class="settings-card-desc">默认不使用模板，模板库由你自行维护</div>
+                                <div class="settings-card-header">
+                                    <div class="settings-card-icon">🎨</div>
+                                    <div>
+                                        <div class="settings-card-title">绘图提示词模板</div>
+                                        <div class="settings-card-desc">选择模板时会把模板内容填充到输入框</div>
+                                    </div>
                                 </div>
-                            </div>
                             <div class="settings-card-body">
                                 <div class="settings-group">
                                     <label>模板库</label>
@@ -1021,10 +1021,10 @@
                                 </div>
                                 <div class="settings-group"><label>模板名称</label><input type="text" id="set-image-template-name" placeholder="例如：电影感海报 / 电商产品图 / 国风插画"></div>
                                 <div class="settings-group"><label>模板备注（可选）</label><input type="text" id="set-image-template-note" placeholder="例如：偏真实、柔光、高细节"></div>
-                                <div class="settings-group"><label>模板内容</label><textarea id="set-image-template-content" placeholder="示例：电影感海报，超清细节，光影强烈，主体：{{prompt}}" style="min-height:130px"></textarea></div>
+                                <div class="settings-group"><label>模板内容</label><textarea id="set-image-template-content" placeholder="示例：电影感海报，超清细节，光影强烈，主体明确，色彩统一" style="min-height:130px"></textarea></div>
                                 <div class="settings-group" style="margin-bottom:0;">
-                                    <label>占位符说明</label>
-                                    <div class="template-manager-hint">在模板里使用 <code>{{prompt}}</code> 或 <code>{{keywords}}</code> 表示“绘图面板输入框里的关键词”。如果模板里不写占位符，系统会自动把关键词追加到模板末尾。</div>
+                                    <label>使用说明</label>
+                                    <div class="template-manager-hint">模板用于快速填充输入框。选择模板后可继续手动修改，再点击生成。</div>
                                 </div>
                             </div>
                         </section>
@@ -2227,8 +2227,8 @@
             if(panel==='image'){
                 return {
                     note:"绘图面板：支持文生图、图生图，以及自定义提示词模板。",
-                    placeholder:"先选模板（可选），再输入关键词或完整描述...",
-                    hint:"Enter 生成图片 / Shift+Enter 换行 / 顶部可选模板",
+                    placeholder:"可先选择模板自动填充，再按需修改后生成...",
+                    hint:"Enter 生成图片 / Shift+Enter 换行 / 选择模板会填充输入框",
                     icon:"🎨",
                     text:"绘图"
                 };
@@ -3019,22 +3019,14 @@
             throw lastErr || new Error("Image request failed.");
         }
 
-        function applyImagePromptTemplate(promptText) {
-            const rawPrompt = String(promptText || "").trim();
-            const activeTemplate = getActiveImagePromptTemplate();
-            if (!activeTemplate || !String(activeTemplate.content || "").trim()) return rawPrompt;
-
-            const templateBody = String(activeTemplate.content || "");
-            const hasPlaceholder = /\{\{\s*(prompt|keywords)\s*\}\}/i.test(templateBody);
-            if (hasPlaceholder) {
-                return templateBody
-                    .replace(/\{\{\s*prompt\s*\}\}/gi, rawPrompt)
-                    .replace(/\{\{\s*keywords\s*\}\}/gi, rawPrompt)
-                    .trim();
-            }
-
-            if (!rawPrompt) return templateBody.trim();
-            return `${templateBody.trim()}\n\n关键词：${rawPrompt}`;
+        function fillImagePromptInputByTemplate(templateId) {
+            const template = getImagePromptTemplateById(templateId);
+            if (!template || !String(template.content || "").trim()) return false;
+            userInput.value = template.content;
+            autoResize();
+            charCounter.innerText = userInput.value.length;
+            userInput.focus();
+            return true;
         }
 
         async function generateImagesByCurrentModel(prompt, attachments, signal) {
@@ -4118,7 +4110,7 @@
         // ══════════════════════════════════════════鈺?
         function getPanelWelcomeContent(panel){
             if(panel==="image"){
-                return `<div class="welcome-screen"><div class="welcome-icon">🎨</div><h2>绘图面板已就绪</h2><p>可先在顶部选择提示词模板，再输入关键词；也支持上传参考图进行图生图。支持并行执行，不影响其他面板任务。</p><div class="quick-prompts"><button class="quick-prompt-btn" onclick="quickSend('赛博朋克城市雨夜，电影级构图，细节丰富')">🌆 赛博城市海报</button><button class="quick-prompt-btn" onclick="quickSend('极简产品摄影，白底，高级打光，4K')">📷 产品视觉图</button><button class="quick-prompt-btn" onclick="quickSend('中国风山水插画，留白，宣纸质感')">🖌️ 国风插画</button></div></div>`;
+                return `<div class="welcome-screen"><div class="welcome-icon">🎨</div><h2>绘图面板已就绪</h2><p>可先在顶部选择提示词模板自动填充输入框，再按需修改；也支持上传参考图进行图生图。支持并行执行，不影响其他面板任务。</p><div class="quick-prompts"><button class="quick-prompt-btn" onclick="quickSend('赛博朋克城市雨夜，电影级构图，细节丰富')">🌆 赛博城市海报</button><button class="quick-prompt-btn" onclick="quickSend('极简产品摄影，白底，高级打光，4K')">📷 产品视觉图</button><button class="quick-prompt-btn" onclick="quickSend('中国风山水插画，留白，宣纸质感')">🖌️ 国风插画</button></div></div>`;
             }
             if(panel==="voice"){
                 return `<div class="welcome-screen"><div class="welcome-icon">🔊</div><h2>语音面板已就绪</h2><p>输入文本即可调用 TTS 生成语音，支持 mp3 / wav / ogg。</p><div class="quick-prompts"><button class="quick-prompt-btn" onclick="quickSend('欢迎来到我们的产品发布会，接下来由我为你介绍核心功能。')">🎙️ 发布会开场白</button><button class="quick-prompt-btn" onclick="quickSend('请把今天的会议纪要在三分钟内向团队同步。')">🗣️ 通知语音</button></div></div>`;
@@ -4236,17 +4228,12 @@
                 return;
             }
 
-            const activeTemplate=getActiveImagePromptTemplate();
-            const templatedPrompt=applyImagePromptTemplate(promptText || "");
-            const effectivePrompt=templatedPrompt || promptText || "基于输入图片生成高质量变体";
-            const userContentPrefix=activeTemplate ? `[模板:${activeTemplate.name}] ` : "";
-            const userContent=`${userContentPrefix}${promptText||"（图生图）"}`;
+            const effectivePrompt=promptText || "基于输入图片生成高质量变体";
+            const userContent=promptText||"（图生图）";
 
             const userMsg={
                 role:"user",
                 content:userContent,
-                imagePromptRaw:String(promptText || ""),
-                imageTemplateId:activeTemplate?.id || "",
                 attachments:imageInputs.length>0?[...imageInputs]:undefined,
                 timestamp:Date.now()
             };
@@ -5059,7 +5046,7 @@
                 id: createImagePromptTemplateId(nextIndex),
                 name: `模板${nextIndex + 1}`,
                 note: "",
-                content: "{{prompt}}"
+                content: "在这里写模板内容，选择后会填充到输入框。"
             };
             config.imagePromptTemplates.push(template);
             settingsImageTemplateEditingId = template.id;
@@ -5590,8 +5577,13 @@
             persistConfig();
             updateModelHint();
             const template=getActiveImagePromptTemplate();
-            if(template)showToast(`🧩 已启用绘图模板：${template.name}`);
-            else showToast("🧩 已切换为不使用模板");
+            if(template){
+                const filled = fillImagePromptInputByTemplate(template.id);
+                if(filled) showToast(`🧩 已填充模板：${template.name}`);
+                else showToast(`🧩 已启用绘图模板：${template.name}`);
+            } else {
+                showToast("🧩 已切换为不使用模板");
+            }
         });
         systemPromptSelect?.addEventListener("change",()=>{
             const syncSettings=isSettingsOverlayActive();
