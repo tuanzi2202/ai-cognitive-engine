@@ -13,6 +13,10 @@ desktop.ini
 *.tmp
 *.log
 
+# Local emoji pack exports / third-party assets
+*-emojis-full.json
+my-emojis-full.json
+
 # Common build artifacts (in case you add tooling later)
 node_modules/
 dist/
