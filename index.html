@@ -407,6 +407,45 @@
         .attach-item:hover .attach-remove { opacity: 1; }
 
         .input-wrapper { display: flex; gap: 10px; align-items: flex-end; }
+        .panel-param-row {
+            display: none;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .panel-param-row.active { display: flex; }
+        .panel-param-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 32px;
+            padding: 4px 8px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface-hover);
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+        .panel-param-group label { font-weight: 600; color: var(--text-muted); }
+        .panel-param-group.wide { flex: 1 1 280px; }
+        .panel-param-group input,
+        .panel-param-group select {
+            height: 24px;
+            min-width: 76px;
+            max-width: 150px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0 8px;
+            background: var(--surface);
+            color: var(--text);
+            font: inherit;
+            outline: none;
+        }
+        .panel-param-group.wide input { max-width: none; width: 100%; }
+        .panel-param-group .range-value { min-width: 34px; text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .panel-param-group input:focus,
+        .panel-param-group select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37,99,235,0.12); }
         .textarea-wrapper { flex: 1; position: relative; }
         .textarea-wrapper::after {
             content: "";
@@ -1486,6 +1525,67 @@
                             <span id="btn-text">发送</span>
                         </button>
                     </div>
+                    <div class="panel-param-row" id="voice-param-row">
+                        <div class="panel-param-group">
+                            <label for="quick-tts-voice">音色</label>
+                            <select id="quick-tts-voice"></select>
+                        </div>
+                        <div class="panel-param-group">
+                            <label for="quick-tts-tone">语气</label>
+                            <select id="quick-tts-tone">
+                                <option value="natural">自然</option>
+                                <option value="warm">温柔</option>
+                                <option value="bright">活泼</option>
+                                <option value="professional">专业</option>
+                                <option value="story">讲故事</option>
+                                <option value="calm">冷静</option>
+                                <option value="dramatic">戏剧感</option>
+                                <option value="whisper">轻声</option>
+                            </select>
+                        </div>
+                        <div class="panel-param-group">
+                            <label for="quick-tts-speed">语速</label>
+                            <input type="range" id="quick-tts-speed" min="0.25" max="4" step="0.05" value="1">
+                            <span class="range-value" id="quick-tts-speed-val">1.00x</span>
+                        </div>
+                        <div class="panel-param-group">
+                            <label for="quick-tts-accent">口音</label>
+                            <select id="quick-tts-accent">
+                                <option value="auto">自动</option>
+                                <option value="mandarin">普通话</option>
+                                <option value="taiwan">台湾腔</option>
+                                <option value="cantonese">粤语感</option>
+                                <option value="american">美式英语</option>
+                                <option value="british">英式英语</option>
+                            </select>
+                        </div>
+                        <div class="panel-param-group">
+                            <label for="quick-tts-format">格式</label>
+                            <select id="quick-tts-format">
+                                <option value="mp3">mp3</option>
+                                <option value="wav">wav</option>
+                                <option value="ogg">ogg</option>
+                            </select>
+                        </div>
+                        <div class="panel-param-group wide">
+                            <label for="quick-tts-instructions">细节</label>
+                            <input type="text" id="quick-tts-instructions" placeholder="例：像播客主持人，停顿自然，结尾上扬">
+                        </div>
+                    </div>
+                    <div class="panel-param-row" id="video-param-row">
+                        <div class="panel-param-group">
+                            <label for="quick-video-duration">时长</label>
+                            <input type="number" id="quick-video-duration" min="1" max="30" step="1" value="5">
+                        </div>
+                        <div class="panel-param-group">
+                            <label for="quick-video-aspect">比例</label>
+                            <select id="quick-video-aspect">
+                                <option value="16:9">16:9</option>
+                                <option value="9:16">9:16</option>
+                                <option value="1:1">1:1</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="input-hint">
                         <div class="hint-left">
                             <span id="panel-shortcut-hint">Enter 发送 · Shift+Enter 换行 · 📁 支持目录上传</span>
@@ -1615,11 +1715,32 @@
                                     </div>
                                     <div class="settings-group"><label>节点名称</label><input type="text" id="set-voice-relay-name" placeholder="例如：语音主节点"></div>
                                     <div class="settings-group"><label>备注信息</label><input type="text" id="set-voice-relay-note" placeholder="例如：高保真 / 中文音色"></div>
+                                    <div class="settings-group">
+                                        <label>提供商</label>
+                                        <select id="set-voice-provider" onchange="handleVoiceProviderInputChange()">
+                                            <option value="openai">OpenAI 兼容</option>
+                                            <option value="gemini">Google Gemini TTS</option>
+                                            <option value="polly">Amazon Polly</option>
+                                        </select>
+                                    </div>
                                     <div class="settings-group"><label>API 地址</label><input type="text" id="set-voice-api-url" placeholder="https://api.example.com/v1/audio/speech"></div>
-                                    <div class="settings-group"><label>API Key</label><input type="password" id="set-voice-api-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-voice-xxxxxxxxxxxx"></div>
-                                    <div class="settings-group"><label>语音模型</label><input type="text" id="set-tts-model" placeholder="gpt-4o-mini-tts"></div>
-                                    <div class="settings-group"><label>语音角色</label><input type="text" id="set-tts-voice" placeholder="alloy"></div>
-                                    <div class="settings-group" style="margin-bottom:0;"><label>语音格式</label><input type="text" id="set-tts-format" placeholder="mp3"></div>
+                                    <div class="settings-group"><label id="set-voice-api-key-label">API Key</label><input type="password" id="set-voice-api-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-voice-xxxxxxxxxxxx"></div>
+                                    <div class="settings-group" data-voice-polly-field style="display:none;"><label>AWS 区域</label><input type="text" id="set-voice-region" placeholder="us-east-1"></div>
+                                    <div class="settings-group" data-voice-polly-field style="display:none;"><label>Secret Access Key</label><input type="password" id="set-voice-secret-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AWS Secret Access Key"></div>
+                                    <div class="settings-group" data-voice-polly-field style="display:none;"><label>Session Token</label><input type="password" id="set-voice-session-token" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="可选，临时凭证才需要"></div>
+                                    <div class="model-settings-block">
+                                        <div class="model-fetch-row">
+                                            <button onclick="fetchModels('voice')">🔄 获取可用模型</button>
+                                            <input type="text" class="model-search model-search-inline" id="voice-model-search" placeholder="输入关键词筛选..." oninput="filterModels('voice')">
+                                            <span class="fetch-status" id="voice-fetch-status"></span>
+                                        </div>
+                                        <div class="model-list-container" id="voice-model-list-container"></div>
+                                        <div style="margin-top:12px;">
+                                            <button class="btn-secondary" style="font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer" onclick="selectAllModels(true,'voice')">全选</button>
+                                            <button class="btn-secondary" style="font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;margin-left:6px" onclick="selectAllModels(false,'voice')">全不选</button>
+                                            <button class="btn-secondary" style="font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;margin-left:6px" onclick="addCustomModel('voice')">＋ 手动添加</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </section>
 
@@ -1653,15 +1774,18 @@
                                     </div>
                                     <div class="settings-group"><label>API 地址</label><input type="text" id="set-video-api-url" placeholder="例如：https://api.evolink.ai/v1 或 https://api.vidu.com"></div>
                                     <div class="settings-group"><label>API Key</label><input type="password" id="set-video-api-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="按服务商要求填写"></div>
-                                    <div class="settings-group"><label>视频模型</label><input type="text" id="set-video-model" placeholder="seedance-2.0 / viduq3-turbo / kling-v2.6-std / veo31_fast"></div>
-                                    <div class="settings-group"><label>默认时长 (秒)</label><input type="number" id="set-video-duration" min="1" max="30" step="1" value="5"></div>
-                                    <div class="settings-group" style="margin-bottom:0;">
-                                        <label>默认画面比例</label>
-                                        <select id="set-video-aspect">
-                                            <option value="16:9">16:9 (横屏)</option>
-                                            <option value="9:16">9:16 (竖屏)</option>
-                                            <option value="1:1">1:1 (方形)</option>
-                                        </select>
+                                    <div class="model-settings-block">
+                                        <div class="model-fetch-row">
+                                            <button onclick="fetchModels('video')">🔄 获取可用模型</button>
+                                            <input type="text" class="model-search model-search-inline" id="video-model-search" placeholder="输入关键词筛选..." oninput="filterModels('video')">
+                                            <span class="fetch-status" id="video-fetch-status"></span>
+                                        </div>
+                                        <div class="model-list-container" id="video-model-list-container"></div>
+                                        <div style="margin-top:12px;">
+                                            <button class="btn-secondary" style="font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer" onclick="selectAllModels(true,'video')">全选</button>
+                                            <button class="btn-secondary" style="font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;margin-left:6px" onclick="selectAllModels(false,'video')">全不选</button>
+                                            <button class="btn-secondary" style="font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;margin-left:6px" onclick="addCustomModel('video')">＋ 手动添加</button>
+                                        </div>
                                     </div>
                                 </div>
                             </section>
@@ -1962,6 +2086,78 @@
         const DEFAULT_TTS_MODEL = "gpt-4o-mini-tts";
         const DEFAULT_TTS_VOICE = "alloy";
         const DEFAULT_TTS_FORMAT = "mp3";
+        const DEFAULT_TTS_SPEED = 1;
+        const DEFAULT_TTS_TONE = "natural";
+        const DEFAULT_TTS_ACCENT = "auto";
+        const DEFAULT_TTS_INSTRUCTIONS = "";
+        const GEMINI_TTS_VOICES = [
+            ["Zephyr", "Zephyr · 明亮轻快"],
+            ["Puck", "Puck · 俏皮活泼"],
+            ["Charon", "Charon · 沉稳有力"],
+            ["Kore", "Kore · 清晰自然"],
+            ["Fenrir", "Fenrir · 低沉厚实"],
+            ["Leda", "Leda · 年轻明亮"],
+            ["Orus", "Orus · 坚定专业"],
+            ["Aoede", "Aoede · 柔和叙述"],
+            ["Callirrhoe", "Callirrhoe · 温润平衡"],
+            ["Autonoe", "Autonoe · 明快自然"],
+            ["Enceladus", "Enceladus · 呼吸感强"],
+            ["Iapetus", "Iapetus · 深沉叙事"],
+            ["Umbriel", "Umbriel · 低调冷静"],
+            ["Algieba", "Algieba · 顺滑亲和"],
+            ["Despina", "Despina · 轻柔细腻"],
+            ["Erinome", "Erinome · 清亮灵动"],
+            ["Algenib", "Algenib · 稳重清楚"],
+            ["Rasalgethi", "Rasalgethi · 成熟厚重"],
+            ["Laomedeia", "Laomedeia · 流畅温和"],
+            ["Achernar", "Achernar · 清澈柔亮"],
+            ["Alnilam", "Alnilam · 中性播报"],
+            ["Schedar", "Schedar · 平实可靠"],
+            ["Gacrux", "Gacrux · 低沉舒缓"],
+            ["Pulcherrima", "Pulcherrima · 细腻悦耳"],
+            ["Achird", "Achird · 亲切自然"],
+            ["Zubenelgenubi", "Zubenelgenubi · 均衡清晰"],
+            ["Vindemiatrix", "Vindemiatrix · 轻快明朗"],
+            ["Sadachbia", "Sadachbia · 柔和平稳"],
+            ["Sadaltager", "Sadaltager · 稳定叙述"],
+            ["Sulafat", "Sulafat · 明亮顺耳"]
+        ];
+        const OPENAI_TTS_VOICES = [
+            ["alloy", "alloy · 中性自然"],
+            ["ash", "ash · 低沉稳重"],
+            ["ballad", "ballad · 叙事感"],
+            ["coral", "coral · 明亮亲和"],
+            ["echo", "echo · 清晰偏男声"],
+            ["fable", "fable · 故事感"],
+            ["nova", "nova · 轻快偏女声"],
+            ["onyx", "onyx · 深沉低音"],
+            ["sage", "sage · 成熟自然"],
+            ["shimmer", "shimmer · 柔和明亮"],
+            ["verse", "verse · 表现力强"]
+        ];
+        const POLLY_TTS_ENGINES = [
+            { id: "neural", name: "Neural · 神经网络音色" },
+            { id: "standard", name: "Standard · 最便宜稳定" },
+            { id: "long-form", name: "Long-form · 长文叙述" },
+            { id: "generative", name: "Generative · 生成式音色" }
+        ];
+        const POLLY_TTS_VOICES = [
+            ["Zhiyu", "Zhiyu · 中文普通话女声"],
+            ["Hiujin", "Hiujin · 粤语女声"],
+            ["Joanna", "Joanna · 美式英语女声"],
+            ["Matthew", "Matthew · 美式英语男声"],
+            ["Amy", "Amy · 英式英语女声"],
+            ["Brian", "Brian · 英式英语男声"],
+            ["Aria", "Aria · 美式英语女声"],
+            ["Danielle", "Danielle · 美式英语女声"],
+            ["Gregory", "Gregory · 美式英语男声"],
+            ["Kazuha", "Kazuha · 日语女声"],
+            ["Takumi", "Takumi · 日语男声"],
+            ["Seoyeon", "Seoyeon · 韩语女声"],
+            ["Vicki", "Vicki · 德语女声"],
+            ["Lucia", "Lucia · 西语女声"],
+            ["Celine", "Celine · 法语女声"]
+        ];
 
         const DEFAULT_SELECTED_MODELS = [
             { id: "claude-opus-4-6-thinking", name: "Claude Opus (Thinking)", vision: true, thinking: true },
@@ -2836,6 +3032,10 @@
             ttsModel: DEFAULT_TTS_MODEL,
             ttsVoice: DEFAULT_TTS_VOICE,
             ttsFormat: DEFAULT_TTS_FORMAT,
+            ttsSpeed: DEFAULT_TTS_SPEED,
+            ttsTone: DEFAULT_TTS_TONE,
+            ttsAccent: DEFAULT_TTS_ACCENT,
+            ttsInstructions: DEFAULT_TTS_INSTRUCTIONS,
             // Video defaults (provider-specific relays can override model)
             videoDuration: 5,
             videoAspectRatio: "16:9",
@@ -2915,6 +3115,30 @@
             return `${base}/v1`;
         }
 
+        function isGoogleGeminiApiUrl(url = "") {
+            return /generativelanguage\.googleapis\.com/i.test(String(url || ""));
+        }
+
+        function isAmazonPollyApiUrl(url = "") {
+            return /(^https:\/\/)?polly[.-][a-z0-9-]+\.amazonaws\.com/i.test(String(url || ""));
+        }
+
+        function normalizePollyApiUrl(region = "us-east-1") {
+            const r = String(region || "us-east-1").trim() || "us-east-1";
+            return `https://polly.${r}.amazonaws.com`;
+        }
+
+        function isGeminiTtsModel(model = "") {
+            return /(^|[-_])tts($|[-_])|preview-tts/i.test(String(model || ""));
+        }
+
+        function normalizeGeminiApiBaseUrl(url = "") {
+            let base = String(url || "").trim().replace(/\/+$/, "");
+            base = base.replace(/\/models(?:\/.*)?$/i, "");
+            if (!/\/v1(?:beta)?$/i.test(base)) base = `${base}/v1beta`;
+            return base.replace(/\/+$/, "");
+        }
+
         function ensureChatCompletionsUrl(url, fallback = DEFAULT_API_URL) {
             const raw = String(url || "").trim();
             if (/\/chat\/completions\/?$/i.test(raw)) return raw.replace(/\/+$/, "");
@@ -2932,6 +3156,8 @@
 
         function ensureVoiceSpeechUrl(url, fallbackChatUrl) {
             const raw = String(url || "").trim();
+            if (isGoogleGeminiApiUrl(raw)) return normalizeGeminiApiBaseUrl(raw);
+            if (isAmazonPollyApiUrl(raw)) return raw.replace(/\/v1\/speech\/?$/i, "").replace(/\/+$/, "");
             if (/\/audio\/speech\/?$/i.test(raw)) return raw.replace(/\/+$/, "");
             const base = normalizeV1BaseUrl(raw || fallbackChatUrl, fallbackChatUrl || DEFAULT_API_URL);
             return `${base}/audio/speech`;
@@ -3067,13 +3293,74 @@
             relay.provider = ["seedance", "vidu", "kling", "veo"].includes(providerRaw) ? providerRaw : "seedance";
             const rawModel = String(relay.model || "").trim();
             relay.model = rawModel && !containsMojibake(rawModel) ? rawModel : getDefaultVideoModelByProvider(relay.provider);
+            relay.selectedModels = normalizeSelectedModels(
+                relay.selectedModels || [{ id: relay.model, name: relay.model }],
+                [{ id: relay.model, name: relay.model }],
+                true
+            );
+            relay.fetchedModels = normalizeFetchedModels(relay.fetchedModels || [relay.model]);
+            relay.activeModelId = String(relay.activeModelId || relay.model || "").trim() || relay.fetchedModels[0] || relay.model;
             relay.apiUrl = String(relay.apiUrl || "").trim().replace(/\/+$/, "");
             relay.apiKey = String(relay.apiKey || "").trim();
             return relay;
         }
 
+        function ensureVoiceRelayState(relay) {
+            if (!relay) return null;
+            const providerRaw = String(relay.provider || relay.voiceProvider || "").trim().toLowerCase();
+            if (["openai", "gemini", "polly"].includes(providerRaw)) {
+                relay.provider = providerRaw;
+            } else if (isAmazonPollyApiUrl(relay.apiUrl)) {
+                relay.provider = "polly";
+            } else if (isGoogleGeminiApiUrl(relay.apiUrl)) {
+                relay.provider = "gemini";
+            } else {
+                relay.provider = "openai";
+            }
+            relay.region = String(relay.region || relay.awsRegion || "us-east-1").trim() || "us-east-1";
+            relay.secretKey = String(relay.secretKey || relay.awsSecretAccessKey || "").trim();
+            relay.sessionToken = String(relay.sessionToken || relay.awsSessionToken || "").trim();
+            relay.apiUrl = relay.provider === "polly"
+                ? normalizeVoiceApiUrl(relay.apiUrl || normalizePollyApiUrl(relay.region), config.voiceApiUrl || config.apiUrl || DEFAULT_VOICE_API_URL)
+                : normalizeVoiceApiUrl(relay.apiUrl || "", config.voiceApiUrl || config.apiUrl || DEFAULT_VOICE_API_URL);
+            relay.apiKey = String(relay.apiKey || "").trim();
+            const rawModel = String(relay.model || relay.ttsModel || config.ttsModel || DEFAULT_TTS_MODEL).trim();
+            const fallbackModel = relay.provider === "polly" ? "neural" : isGoogleGeminiApiUrl(relay.apiUrl) ? "gemini-2.5-flash-preview-tts" : DEFAULT_TTS_MODEL;
+            relay.model = rawModel && !containsMojibake(rawModel) ? rawModel : fallbackModel;
+            if (isGoogleGeminiApiUrl(relay.apiUrl) && !isGeminiTtsModel(relay.model)) relay.model = fallbackModel;
+            if (relay.provider === "polly" && !POLLY_TTS_ENGINES.some(item => item.id === relay.model)) relay.model = fallbackModel;
+            relay.ttsModel = relay.model;
+            relay.selectedModels = normalizeSelectedModels(
+                relay.selectedModels || [{ id: relay.model, name: relay.model }],
+                [{ id: relay.model, name: relay.model }],
+                true
+            );
+            relay.fetchedModels = normalizeFetchedModels(relay.fetchedModels || [relay.model]);
+            if (isGoogleGeminiApiUrl(relay.apiUrl)) {
+                relay.fetchedModels = normalizeFetchedModels(relay.fetchedModels.filter(isGeminiTtsModel));
+                relay.selectedModels = relay.selectedModels.filter(item => isGeminiTtsModel(item.id));
+                if (relay.selectedModels.length === 0) {
+                    relay.selectedModels = normalizeSelectedModels([{ id: fallbackModel, name: fallbackModel }], [{ id: fallbackModel, name: fallbackModel }], false);
+                }
+                if (relay.fetchedModels.length === 0) relay.fetchedModels = normalizeFetchedModels([fallbackModel]);
+            }
+            if (relay.provider === "polly") {
+                relay.fetchedModels = normalizeFetchedModels(POLLY_TTS_ENGINES.map(item => item.id));
+                relay.selectedModels = relay.selectedModels.filter(item => POLLY_TTS_ENGINES.some(engine => engine.id === item.id));
+                if (relay.selectedModels.length === 0) {
+                    relay.selectedModels = normalizeSelectedModels([{ id: fallbackModel, name: fallbackModel }], [{ id: fallbackModel, name: fallbackModel }], false);
+                }
+            }
+            relay.activeModelId = String(relay.activeModelId || relay.model || "").trim() || relay.fetchedModels[0] || relay.model;
+            if (isGoogleGeminiApiUrl(relay.apiUrl) && !isGeminiTtsModel(relay.activeModelId)) relay.activeModelId = relay.selectedModels[0]?.id || fallbackModel;
+            if (relay.provider === "polly" && !POLLY_TTS_ENGINES.some(item => item.id === relay.activeModelId)) relay.activeModelId = fallbackModel;
+            return relay;
+        }
+
         function ensureRelayModelStateByType(type, relay) {
             if (type === "image") return ensureImageRelayModelState(relay);
+            if (type === "voice") return ensureVoiceRelayState(relay);
+            if (type === "video") return ensureVideoRelayState(relay);
             return ensureChatRelayModelState(relay);
         }
 
@@ -3102,6 +3389,25 @@
                 syncLegacyImageModelConfigWithRelay(relay);
                 return;
             }
+            if (type === "voice") {
+                const target = ensureVoiceRelayState(relay);
+                config.ttsModel = String(target?.activeModelId || target?.model || config.ttsModel || DEFAULT_TTS_MODEL).trim() || DEFAULT_TTS_MODEL;
+                if (target) {
+                    target.model = config.ttsModel;
+                    target.ttsModel = config.ttsModel;
+                }
+                config.voiceApiUrl = target?.apiUrl || config.voiceApiUrl || DEFAULT_VOICE_API_URL;
+                config.voiceApiKey = target?.apiKey || config.voiceApiKey || DEFAULT_VOICE_API_KEY;
+                return;
+            }
+            if (type === "video") {
+                const target = ensureVideoRelayState(relay);
+                config.videoModel = target?.activeModelId || target?.model || config.videoModel || "";
+                if (target && config.videoModel) target.model = config.videoModel;
+                config.videoApiUrl = target?.apiUrl || config.videoApiUrl || "";
+                config.videoApiKey = target?.apiKey || config.videoApiKey || "";
+                return;
+            }
             syncLegacyModelConfigWithRelay(relay);
         }
 
@@ -3115,6 +3421,18 @@
             const relays = getRelaysByType("image");
             const relay = relays.find(item => item.id === relayId) || getActiveRelayByType("image");
             return ensureImageRelayModelState(relay);
+        }
+
+        function getVoiceRelayById(relayId) {
+            const relays = getRelaysByType("voice");
+            const relay = relays.find(item => item.id === relayId) || getActiveRelayByType("voice");
+            return ensureVoiceRelayState(relay);
+        }
+
+        function getVideoRelayById(relayId) {
+            const relays = getRelaysByType("video");
+            const relay = relays.find(item => item.id === relayId) || getActiveRelayByType("video");
+            return ensureVideoRelayState(relay);
         }
 
         function isSettingsOverlayActive() {
@@ -3154,6 +3472,20 @@
                     status: "image-fetch-status"
                 };
             }
+            if (type === "voice") {
+                return {
+                    list: "voice-model-list-container",
+                    search: "voice-model-search",
+                    status: "voice-fetch-status"
+                };
+            }
+            if (type === "video") {
+                return {
+                    list: "video-model-list-container",
+                    search: "video-model-search",
+                    status: "video-fetch-status"
+                };
+            }
             return {
                 list: "model-list-container",
                 search: "model-search",
@@ -3162,15 +3494,18 @@
         }
 
         function getModelTargetRelay(type = "chat") {
-            const relayType = type === "image" ? "image" : "chat";
+            const relayType = type === "image" ? "image" : (type === "voice" ? "voice" : (type === "video" ? "video" : "chat"));
             const useSettingsRelay = isSettingsOverlayActive() && currentPanelSettingsTab === relayType;
             const relayId = useSettingsRelay ? getSettingsEditingRelayId(relayType) : getActiveRelayIdByType(relayType);
             if (relayType === "image") return getImageRelayById(relayId);
+            if (relayType === "voice") return getVoiceRelayById(relayId);
+            if (relayType === "video") return getVideoRelayById(relayId);
             return getChatRelayById(relayId);
         }
 
         function getModelsApiBaseUrl(apiUrl, type = "chat") {
             let base = String(apiUrl || "").trim().replace(/\/+$/, "");
+            if (isGoogleGeminiApiUrl(base)) return normalizeGeminiApiBaseUrl(base);
             if (type === "image") {
                 base = base.replace(/\/images\/(generations|edits)\/?$/i, "");
             } else if (type === "voice") {
@@ -3182,16 +3517,24 @@
         }
 
         function getFetchModelsContext(type = "chat") {
-            const modelType = type === "image" ? "image" : "chat";
+            const modelType = type === "image" ? "image" : (type === "voice" ? "voice" : (type === "video" ? "video" : "chat"));
             const relay = getModelTargetRelay(modelType);
             if (!relay) return null;
             const useSettingsInput = isSettingsOverlayActive() && currentPanelSettingsTab === modelType;
-            const apiUrlInput = document.getElementById(modelType === "image" ? "set-image-api-url" : "set-chat-api-url");
-            const apiKeyInput = document.getElementById(modelType === "image" ? "set-image-api-key" : "set-chat-api-key");
+            const apiUrlInput = document.getElementById(modelType === "image" ? "set-image-api-url" : modelType === "voice" ? "set-voice-api-url" : modelType === "video" ? "set-video-api-url" : "set-chat-api-url");
+            const apiKeyInput = document.getElementById(modelType === "image" ? "set-image-api-key" : modelType === "voice" ? "set-voice-api-key" : modelType === "video" ? "set-video-api-key" : "set-chat-api-key");
             const apiUrl = modelType === "image"
                 ? (useSettingsInput
                     ? normalizeImageApiUrl(apiUrlInput?.value || relay.apiUrl, config.apiUrl || DEFAULT_API_URL)
                     : normalizeImageApiUrl(relay.apiUrl, config.apiUrl || DEFAULT_API_URL))
+                : modelType === "voice"
+                ? (useSettingsInput
+                    ? normalizeVoiceApiUrl(apiUrlInput?.value || relay.apiUrl, config.apiUrl || DEFAULT_API_URL)
+                    : normalizeVoiceApiUrl(relay.apiUrl, config.apiUrl || DEFAULT_API_URL))
+                : modelType === "video"
+                ? (useSettingsInput
+                    ? normalizeChatApiUrl(apiUrlInput?.value || relay.apiUrl, "")
+                    : normalizeChatApiUrl(relay.apiUrl, ""))
                 : (useSettingsInput
                     ? normalizeChatApiUrl(apiUrlInput?.value || relay.apiUrl, DEFAULT_API_URL)
                     : normalizeChatApiUrl(relay.apiUrl, DEFAULT_API_URL));
@@ -3435,12 +3778,44 @@
                 normalizedRelay.activeModelId = selectedIds.includes(maybeActive)
                     ? maybeActive
                     : (selectedIds[0] || normalizedRelay.fetchedModels[0] || DEFAULT_IMAGE_MODEL);
+            } else if (type === "voice") {
+                const providerRaw = String(relay?.provider || relay?.voiceProvider || "").trim().toLowerCase();
+                const provider = ["openai", "gemini", "polly"].includes(providerRaw)
+                    ? providerRaw
+                    : (isAmazonPollyApiUrl(apiUrl) ? "polly" : (isGoogleGeminiApiUrl(apiUrl) ? "gemini" : "openai"));
+                const model = String(relay?.activeModelId || relay?.model || relay?.ttsModel || config.ttsModel || DEFAULT_TTS_MODEL).trim() || DEFAULT_TTS_MODEL;
+                normalizedRelay.provider = provider;
+                normalizedRelay.region = String(relay?.region || relay?.awsRegion || "us-east-1").trim() || "us-east-1";
+                normalizedRelay.secretKey = String(relay?.secretKey || relay?.awsSecretAccessKey || "").trim();
+                normalizedRelay.sessionToken = String(relay?.sessionToken || relay?.awsSessionToken || "").trim();
+                normalizedRelay.model = model;
+                normalizedRelay.ttsModel = model;
+                normalizedRelay.selectedModels = normalizeSelectedModels(
+                    relay?.selectedModels || relay?.models || [{ id: model, name: model }],
+                    [{ id: model, name: model }],
+                    true
+                );
+                normalizedRelay.fetchedModels = normalizeFetchedModels(relay?.fetchedModels || relay?.availableModels || normalizedRelay.selectedModels.map(item => item.id));
+                const selectedIds = normalizedRelay.selectedModels.map(item => item.id);
+                normalizedRelay.activeModelId = selectedIds.includes(model)
+                    ? model
+                    : (selectedIds[0] || normalizedRelay.fetchedModels[0] || model);
             } else if (type === "video") {
                 const providerRaw = String(relay?.provider || relay?.videoProvider || "").trim().toLowerCase();
                 const provider = ["seedance", "vidu", "kling", "veo"].includes(providerRaw) ? providerRaw : "seedance";
-                const model = String(relay?.model || relay?.videoModel || "").trim();
+                const model = String(relay?.activeModelId || relay?.model || relay?.videoModel || getDefaultVideoModelByProvider(provider)).trim() || getDefaultVideoModelByProvider(provider);
                 normalizedRelay.provider = provider;
                 normalizedRelay.model = model;
+                normalizedRelay.selectedModels = normalizeSelectedModels(
+                    relay?.selectedModels || relay?.models || [{ id: model, name: model }],
+                    [{ id: model, name: model }],
+                    true
+                );
+                normalizedRelay.fetchedModels = normalizeFetchedModels(relay?.fetchedModels || relay?.availableModels || normalizedRelay.selectedModels.map(item => item.id));
+                const selectedIds = normalizedRelay.selectedModels.map(item => item.id);
+                normalizedRelay.activeModelId = selectedIds.includes(model)
+                    ? model
+                    : (selectedIds[0] || normalizedRelay.fetchedModels[0] || model);
             }
             return normalizedRelay;
         }
@@ -3507,6 +3882,7 @@
             const chatRelay = getActiveRelayByType("chat");
             const imageRelay = getActiveRelayByType("image");
             const voiceRelay = getActiveRelayByType("voice");
+            const videoRelay = getActiveRelayByType("video");
 
             if (chatRelay) {
                 ensureChatRelayModelState(chatRelay);
@@ -3523,9 +3899,14 @@
                 syncLegacyImageModelConfigWithRelay(imageRelay);
             }
             if (voiceRelay) {
-                config.voiceApiUrl = voiceRelay.apiUrl;
-                config.voiceApiKey = voiceRelay.apiKey;
+                ensureVoiceRelayState(voiceRelay);
                 config.activeVoiceRelayId = voiceRelay.id;
+                syncLegacyModelStateByType("voice", voiceRelay);
+            }
+            if (videoRelay) {
+                ensureVideoRelayState(videoRelay);
+                config.activeVideoRelayId = videoRelay.id;
+                syncLegacyModelStateByType("video", videoRelay);
             }
 
             config.activeRelayId = config.activeChatRelayId;
@@ -3799,6 +4180,11 @@
             if (!config.ttsVoice) config.ttsVoice = DEFAULT_TTS_VOICE;
             config.ttsFormat = (config.ttsFormat || DEFAULT_TTS_FORMAT).toLowerCase();
             if (!['mp3', 'wav', 'ogg'].includes(config.ttsFormat)) config.ttsFormat = DEFAULT_TTS_FORMAT;
+            const speed = parseFloat(config.ttsSpeed);
+            config.ttsSpeed = Number.isFinite(speed) ? Math.max(0.25, Math.min(4, speed)) : DEFAULT_TTS_SPEED;
+            if (!["natural", "warm", "bright", "professional", "story", "calm", "dramatic", "whisper"].includes(config.ttsTone)) config.ttsTone = DEFAULT_TTS_TONE;
+            if (!["auto", "mandarin", "taiwan", "cantonese", "american", "british"].includes(config.ttsAccent)) config.ttsAccent = DEFAULT_TTS_ACCENT;
+            if (typeof config.ttsInstructions !== "string") config.ttsInstructions = DEFAULT_TTS_INSTRUCTIONS;
             if (typeof config.videoDuration !== "number") config.videoDuration = 5;
             if (config.videoDuration < 1 || config.videoDuration > 30) config.videoDuration = 5;
             if (typeof config.videoAspectRatio !== "string") config.videoAspectRatio = "16:9";
@@ -3873,6 +4259,7 @@
 
             config.chatRelays.forEach(relay => ensureChatRelayModelState(relay));
             config.imageRelays.forEach(relay => ensureImageRelayModelState(relay));
+            config.voiceRelays.forEach(relay => ensureVoiceRelayState(relay));
             config.videoRelays.forEach(relay => ensureVideoRelayState(relay));
             syncLegacyModelConfigWithRelay(getActiveRelayByType("chat"));
             syncLegacyImageModelConfigWithRelay(getActiveRelayByType("image"));
@@ -3914,6 +4301,17 @@
         const modelSelect = document.getElementById("model-select");
         const imageTemplateSelect = document.getElementById("image-template-select");
         const systemPromptSelect = document.getElementById("system-prompt-select");
+        const voiceParamRow = document.getElementById("voice-param-row");
+        const videoParamRow = document.getElementById("video-param-row");
+        const quickTtsVoiceInput = document.getElementById("quick-tts-voice");
+        const quickTtsToneSelect = document.getElementById("quick-tts-tone");
+        const quickTtsSpeedInput = document.getElementById("quick-tts-speed");
+        const quickTtsSpeedVal = document.getElementById("quick-tts-speed-val");
+        const quickTtsAccentSelect = document.getElementById("quick-tts-accent");
+        const quickTtsFormatSelect = document.getElementById("quick-tts-format");
+        const quickTtsInstructionsInput = document.getElementById("quick-tts-instructions");
+        const quickVideoDurationInput = document.getElementById("quick-video-duration");
+        const quickVideoAspectSelect = document.getElementById("quick-video-aspect");
         const fileInput = document.getElementById("file-input");
         const dirInput = document.getElementById("dir-input");
         const attachPreview = document.getElementById("attachments-preview");
@@ -3983,7 +4381,7 @@
         let streamBubbleEl = null, streamThoughtEl = null, streamThoughtDetail = null, streamContentEl = null;
         let activeStreamMessage = null, activeStreamSessionId = "";
         let activeStreamPanel = currentPanel;
-        const modelFetchTokenMap = { chat: 0, image: 0 };
+        const modelFetchTokenMap = { chat: 0, image: 0, voice: 0, video: 0 };
         let settingsAutoSaveTimer = null;
         let renderRafId = null, lastRenderTs = 0;
         const BASE_THROTTLE_MS = 80;
@@ -4013,17 +4411,23 @@
             applyActiveRelayToLegacyConfig();
             persistConfig();
             relaySelect.value = relay.id;
-            if (relayType === "chat" || relayType === "image") populateModelSelect(relayType);
-            if (relayType === "video") updateModelHint();
+            populateModelSelect(relayType);
             if (!silent) showToast(`🌐 已切换${getRelayTypeLabel(relayType)}中转：${relay.name}`);
         }
 
         function populateModelSelect(modelType = "chat") {
-            const type = modelType === "image" ? "image" : "chat";
+            const type = modelType === "image" ? "image" : modelType === "voice" ? "voice" : modelType === "video" ? "video" : "chat";
             const relay = ensureRelayModelStateByType(type, getActiveRelayByType(type));
             const availableIds = new Set(relay?.fetchedModels || []);
+            const fallbackModelId = type === "voice"
+                ? (relay?.model || config.ttsModel || DEFAULT_TTS_MODEL)
+                : type === "video"
+                ? (relay?.model || getDefaultVideoModelByProvider(relay?.provider))
+                : "";
             const defaultSelected = type === "image"
                 ? normalizeSelectedModels(DEFAULT_IMAGE_SELECTED_MODELS, DEFAULT_IMAGE_SELECTED_MODELS)
+                : (type === "voice" || type === "video")
+                ? normalizeSelectedModels([{ id: fallbackModelId, name: fallbackModelId }], [{ id: fallbackModelId, name: fallbackModelId }])
                 : normalizeSelectedModels(config.selectedModels, DEFAULT_SELECTED_MODELS);
             const selectedModels = relay?.selectedModels?.length > 0 ? relay.selectedModels : defaultSelected;
             let models = selectedModels.filter(item => availableIds.size === 0 || availableIds.has(item.id));
@@ -4032,7 +4436,7 @@
             if(models.length===0){
                 const emptyOption=document.createElement('option');
                 emptyOption.value='';
-                emptyOption.textContent=type==="image"?'请在设置中获取并激活绘图模型':'请在设置中获取并激活模型';
+                emptyOption.textContent=type==="image"?'请在设置中获取并激活绘图模型':type==="voice"?'请在设置中获取并激活语音模型':type==="video"?'请在设置中获取并激活视频模型':'请在设置中获取并激活模型';
                 modelSelect.appendChild(emptyOption);
             }
             models.forEach(m => {
@@ -4098,12 +4502,13 @@
                 const relay=ensureVideoRelayState(getActiveRelayByType("video"));
                 const p=String(relay?.provider||"video").toLowerCase();
                 const label=p==="seedance"?"Seedance":p==="vidu"?"Vidu":p==="kling"?"可灵 (Kling)":p==="veo"?"Veo":"视频";
-                const model=relay?.model||"-";
+                const model=relay?.activeModelId || relay?.model || "-";
                 document.getElementById("model-hint").innerText = `视频: ${label} · ${model} · ${config.videoDuration||5}s · ${config.videoAspectRatio||"16:9"}`;
                 return;
             }
             if(currentPanel==='voice'){
-                const voice=config.ttsVoice || DEFAULT_TTS_VOICE;
+                const relay=ensureVoiceRelayState(getActiveRelayByType("voice"));
+                const voice=relay?.provider==="polly" && (!config.ttsVoice || config.ttsVoice===DEFAULT_TTS_VOICE) ? "Zhiyu" : relay?.provider==="gemini" && (!config.ttsVoice || config.ttsVoice===DEFAULT_TTS_VOICE) ? "Kore" : (config.ttsVoice || DEFAULT_TTS_VOICE);
                 document.getElementById("model-hint").innerText = `语音模型: ${config.ttsModel || DEFAULT_TTS_MODEL} · ${voice}`;
                 return;
             }
@@ -4120,6 +4525,67 @@
             if (model?.thinking) badges += ' [thinking]';
             if (model?.imageGen) badges += ' [image]';
             document.getElementById("model-hint").innerText = `模型: ${name}${badges}`;
+        }
+
+        function populateTtsVoiceSelect() {
+            if (!quickTtsVoiceInput) return;
+            const relay = getActiveRelayByType("voice");
+            const provider = ensureVoiceRelayState(relay)?.provider || "openai";
+            const voices = provider === "polly" ? POLLY_TTS_VOICES : provider === "gemini" ? GEMINI_TTS_VOICES : OPENAI_TTS_VOICES;
+            const fallback = provider === "polly" ? "Zhiyu" : provider === "gemini" ? "Kore" : DEFAULT_TTS_VOICE;
+            let current = config.ttsVoice || fallback;
+            if (!voices.some(([value]) => value === current)) {
+                current = fallback;
+                config.ttsVoice = current;
+            }
+            quickTtsVoiceInput.innerHTML = "";
+            voices.forEach(([value, label]) => {
+                const option = document.createElement("option");
+                option.value = value;
+                option.textContent = label;
+                option.title = label;
+                quickTtsVoiceInput.appendChild(option);
+            });
+            quickTtsVoiceInput.value = current;
+        }
+
+        function syncQuickPanelParamsFromConfig() {
+            const voiceRelay = getActiveRelayByType("voice");
+            const voiceProvider = ensureVoiceRelayState(voiceRelay)?.provider || "openai";
+            populateTtsVoiceSelect();
+            if (quickTtsToneSelect) quickTtsToneSelect.value = config.ttsTone || DEFAULT_TTS_TONE;
+            if (quickTtsSpeedInput) quickTtsSpeedInput.value = String(config.ttsSpeed || DEFAULT_TTS_SPEED);
+            if (quickTtsSpeedVal) quickTtsSpeedVal.textContent = `${(config.ttsSpeed || DEFAULT_TTS_SPEED).toFixed(2)}x`;
+            if (quickTtsAccentSelect) quickTtsAccentSelect.value = config.ttsAccent || DEFAULT_TTS_ACCENT;
+            if (quickTtsFormatSelect) quickTtsFormatSelect.value = config.ttsFormat || DEFAULT_TTS_FORMAT;
+            if (quickTtsInstructionsInput) quickTtsInstructionsInput.value = config.ttsInstructions || DEFAULT_TTS_INSTRUCTIONS;
+            if (quickVideoDurationInput) quickVideoDurationInput.value = String(config.videoDuration || 5);
+            if (quickVideoAspectSelect) quickVideoAspectSelect.value = config.videoAspectRatio || "16:9";
+        }
+
+        function saveQuickVoiceParams() {
+            config.ttsVoice = quickTtsVoiceInput?.value.trim() || DEFAULT_TTS_VOICE;
+            config.ttsTone = quickTtsToneSelect?.value || DEFAULT_TTS_TONE;
+            const speed = parseFloat(quickTtsSpeedInput?.value || String(DEFAULT_TTS_SPEED));
+            config.ttsSpeed = Number.isFinite(speed) ? Math.max(0.25, Math.min(4, speed)) : DEFAULT_TTS_SPEED;
+            if (quickTtsSpeedInput) quickTtsSpeedInput.value = String(config.ttsSpeed);
+            if (quickTtsSpeedVal) quickTtsSpeedVal.textContent = `${config.ttsSpeed.toFixed(2)}x`;
+            config.ttsAccent = quickTtsAccentSelect?.value || DEFAULT_TTS_ACCENT;
+            const fmt = (quickTtsFormatSelect?.value || DEFAULT_TTS_FORMAT).toLowerCase();
+            config.ttsFormat = ["mp3", "wav", "ogg"].includes(fmt) ? fmt : DEFAULT_TTS_FORMAT;
+            config.ttsInstructions = quickTtsInstructionsInput?.value.trim() || DEFAULT_TTS_INSTRUCTIONS;
+            persistConfig();
+            updateModelHint();
+        }
+
+        function saveQuickVideoParams() {
+            const duration = parseInt(quickVideoDurationInput?.value || "5", 10);
+            config.videoDuration = Number.isFinite(duration) ? Math.max(1, Math.min(30, duration)) : 5;
+            config.videoAspectRatio = normalizeVideoAspectRatio(quickVideoAspectSelect?.value || "16:9");
+            if (quickVideoDurationInput) quickVideoDurationInput.value = String(config.videoDuration);
+            if (quickVideoAspectSelect) quickVideoAspectSelect.value = config.videoAspectRatio;
+            persistConfig();
+            updateModelHint();
         }
 
         function isCurrentModelVision() {
@@ -4264,10 +4730,13 @@
             const imageTemplateWrap=document.getElementById("image-template-select-wrap");
             const imageTemplateManageBtn=document.getElementById("image-template-manage-btn");
             const promptWrap=document.querySelector('.system-prompt-select-wrapper');
-            if(modelWrap)modelWrap.style.display=(currentPanel==='chat' || currentPanel==='image')?'block':'none';
+            if(modelWrap)modelWrap.style.display='block';
             if(imageTemplateWrap)imageTemplateWrap.style.display=currentPanel==='image'?'block':'none';
             if(imageTemplateManageBtn)imageTemplateManageBtn.style.display=currentPanel==='image'?'flex':'none';
             if(promptWrap)promptWrap.style.display=currentPanel==='chat'?'block':'none';
+            syncQuickPanelParamsFromConfig();
+            voiceParamRow?.classList.toggle('active', currentPanel === 'voice');
+            videoParamRow?.classList.toggle('active', currentPanel === 'video');
             renderChatThreadBar();
             closeEmojiPicker();
             document.getElementById('upload-menu').classList.remove('active');
@@ -4296,7 +4765,7 @@
 
             populateRelaySelect();
             populateImageTemplateSelect(config.activeImagePromptTemplateId);
-            if(currentPanel==='chat' || currentPanel==='image')populateModelSelect(currentPanel);
+            populateModelSelect(currentPanel);
             applyPanelSendButton();
             updateModelHint();
             render(currentPanel);
@@ -4649,6 +5118,45 @@ ${packLines}`;
             }
         }
 
+        async function downloadAudioAttachment(data,name){
+            if(!data||data==='[AUDIO_DATA_STRIPPED]'){showToast("Audio data unavailable","warning");return;}
+            if(!isSafeAttachmentUrl(data)){showToast("⚠️ 已阻止不安全的下载链接","error");return;}
+            const filename=sanitizeDownloadFilename(name,"generated-audio.mp3");
+            try{
+                if(/^data:/i.test(data)||/^blob:/i.test(data)){
+                    const a=document.createElement('a');
+                    a.href=data;
+                    a.download=filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    showToast(`Downloaded ${filename}`);
+                    return;
+                }
+                const resp=await fetch(data,{mode:'cors'});
+                if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
+                const blob=await resp.blob();
+                const blobUrl=URL.createObjectURL(blob);
+                const a=document.createElement('a');
+                a.href=blobUrl;
+                a.download=filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(()=>URL.revokeObjectURL(blobUrl),5000);
+                showToast(`Downloaded ${filename}`);
+            }catch(e){
+                const a=document.createElement('a');
+                a.href=data;
+                a.target='_blank';
+                a.rel='noopener noreferrer';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                showToast("无法直接下载，已在新标签页打开","warning");
+            }
+        }
+
         function getRelayBaseApiUrl(relay) {
             const apiUrl = relay?.apiUrl || config.apiUrl || DEFAULT_API_URL;
             return normalizeV1BaseUrl(apiUrl, DEFAULT_API_URL);
@@ -4880,6 +5388,63 @@ ${packLines}`;
                 if (normalized) return normalized;
             }
             return null;
+        }
+
+        function extractGeminiAudioFromApiResponse(payload) {
+            const parts = payload?.candidates?.[0]?.content?.parts || payload?.content?.parts || [];
+            for (const part of parts) {
+                const inlineData = part?.inlineData || part?.inline_data;
+                const data = inlineData?.data;
+                if (data) {
+                    const mime = inlineData?.mimeType || inlineData?.mime_type || "audio/pcm";
+                    if (/wav|mpeg|mp3|ogg/i.test(mime)) return { data: `data:${mime};base64,${data}`, mime };
+                    return { data: pcmBase64ToWavDataUrl(data), mime: "audio/wav" };
+                }
+            }
+            return null;
+        }
+
+        function pcmBase64ToWavDataUrl(base64, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
+            const binary = atob(base64);
+            const pcm = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) pcm[i] = binary.charCodeAt(i);
+            return pcmBytesToWavDataUrl(pcm, sampleRate, channels, bitsPerSample);
+        }
+
+        function pcmBytesToWavDataUrl(pcm, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
+            const header = new ArrayBuffer(44);
+            const view = new DataView(header);
+            const writeString = (offset, text) => {
+                for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+            };
+            const byteRate = sampleRate * channels * bitsPerSample / 8;
+            const blockAlign = channels * bitsPerSample / 8;
+            writeString(0, "RIFF");
+            view.setUint32(4, 36 + pcm.length, true);
+            writeString(8, "WAVE");
+            writeString(12, "fmt ");
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, channels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitsPerSample, true);
+            writeString(36, "data");
+            view.setUint32(40, pcm.length, true);
+            const wav = new Uint8Array(44 + pcm.length);
+            wav.set(new Uint8Array(header), 0);
+            wav.set(pcm, 44);
+            let out = "";
+            for (let i = 0; i < wav.length; i++) out += String.fromCharCode(wav[i]);
+            return `data:audio/wav;base64,${btoa(out)}`;
+        }
+
+        function arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let out = "";
+            for (let i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
+            return btoa(out);
         }
 
         function getImageSizeCandidates(endpoint = "") {
@@ -5371,7 +5936,7 @@ ${packLines}`;
             if (!relay.apiKey) throw new Error("当前视频节点缺少 API Key");
 
             const provider = String(relay.provider || "seedance").toLowerCase();
-            const model = String(relay.model || getDefaultVideoModelByProvider(provider)).trim() || getDefaultVideoModelByProvider(provider);
+            const model = String(relay.activeModelId || relay.model || getDefaultVideoModelByProvider(provider)).trim() || getDefaultVideoModelByProvider(provider);
             const duration = Math.max(1, Math.min(30, parseInt(config.videoDuration || 5)));
             const aspectRatio = normalizeVideoAspectRatio(config.videoAspectRatio || "16:9");
             const sourceImages = normalizeInputImages(
@@ -5506,8 +6071,173 @@ ${packLines}`;
             }));
         }
 
-        async function requestTextToSpeech({ endpoint, apiKey, model, voice, format, input, signal }) {
+        function buildTtsStyleInstruction() {
+            const toneMap = {
+                natural: "Use a natural, conversational delivery.",
+                warm: "Use a warm, gentle, reassuring tone.",
+                bright: "Use a bright, energetic, friendly tone.",
+                professional: "Use a clear, professional presenter style.",
+                story: "Use an engaging storytelling style with expressive pacing.",
+                calm: "Use a calm, steady, relaxed tone.",
+                dramatic: "Use a dramatic, emotionally expressive tone.",
+                whisper: "Use a soft, quiet, intimate tone."
+            };
+            const accentMap = {
+                mandarin: "Prefer standard Mandarin pronunciation when reading Chinese.",
+                taiwan: "Use a Taiwan Mandarin flavor when reading Chinese.",
+                cantonese: "Use a Cantonese-influenced Chinese delivery where appropriate.",
+                american: "Use an American English accent where appropriate.",
+                british: "Use a British English accent where appropriate."
+            };
+            const pieces = [];
+            pieces.push(toneMap[config.ttsTone] || toneMap.natural);
+            if (config.ttsAccent && config.ttsAccent !== "auto") pieces.push(accentMap[config.ttsAccent] || "");
+            const speed = parseFloat(config.ttsSpeed || DEFAULT_TTS_SPEED);
+            if (Number.isFinite(speed) && Math.abs(speed - 1) > 0.01) {
+                pieces.push(speed < 1 ? `Speak slower than normal, around ${speed.toFixed(2)}x pace.` : `Speak faster than normal, around ${speed.toFixed(2)}x pace.`);
+            }
+            if (config.ttsInstructions) pieces.push(config.ttsInstructions);
+            return pieces.filter(Boolean).join(" ");
+        }
+
+        function escapeXml(text) {
+            return String(text ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;");
+        }
+
+        function getPollyProsodyRate() {
+            const speed = parseFloat(config.ttsSpeed || DEFAULT_TTS_SPEED);
+            if (!Number.isFinite(speed)) return "medium";
+            if (speed < 0.65) return "x-slow";
+            if (speed < 0.9) return "slow";
+            if (speed > 1.45) return "x-fast";
+            if (speed > 1.12) return "fast";
+            return "medium";
+        }
+
+        async function sha256Hex(text) {
+            const bytes = new TextEncoder().encode(text);
+            const hash = await crypto.subtle.digest("SHA-256", bytes);
+            return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,"0")).join("");
+        }
+
+        async function hmacSha256(key, text) {
+            const rawKey = key instanceof ArrayBuffer || ArrayBuffer.isView(key) ? key : new TextEncoder().encode(String(key));
+            const cryptoKey = await crypto.subtle.importKey("raw", rawKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+            return crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(text));
+        }
+
+        async function getAwsSignatureKey(secretKey, dateStamp, region, service) {
+            const kDate = await hmacSha256(`AWS4${secretKey}`, dateStamp);
+            const kRegion = await hmacSha256(kDate, region);
+            const kService = await hmacSha256(kRegion, service);
+            return hmacSha256(kService, "aws4_request");
+        }
+
+        function hexFromBuffer(buffer) {
+            return Array.from(new Uint8Array(buffer)).map(b=>b.toString(16).padStart(2,"0")).join("");
+        }
+
+        async function requestAmazonPollySpeech({ relay, model, voice, format, input, signal }) {
+            const region = String(relay.region || "us-east-1").trim() || "us-east-1";
+            const accessKeyId = String(relay.apiKey || "").trim();
+            const secretKey = String(relay.secretKey || "").trim();
+            if (!accessKeyId || !secretKey) throw new Error("Amazon Polly 需要 Access Key ID 和 Secret Access Key");
+            const endpoint = normalizePollyApiUrl(region);
+            const url = `${endpoint}/v1/speech`;
+            const outputFormat = format === "ogg" ? "ogg_vorbis" : format === "wav" ? "pcm" : "mp3";
+            const body = {
+                Engine: POLLY_TTS_ENGINES.some(item => item.id === model) ? model : "neural",
+                OutputFormat: outputFormat,
+                Text: `<speak><prosody rate="${getPollyProsodyRate()}">${escapeXml(input)}</prosody></speak>`,
+                TextType: "ssml",
+                VoiceId: voice || "Zhiyu"
+            };
+            if (outputFormat === "pcm") body.SampleRate = "24000";
+            const payload = JSON.stringify(body);
+            const payloadHash = await sha256Hex(payload);
+            const now = new Date();
+            const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+            const dateStamp = amzDate.slice(0, 8);
+            const host = `polly.${region}.amazonaws.com`;
+            const sessionToken = String(relay.sessionToken || "").trim();
+            const headerEntries = [
+                ["content-type", "application/json"],
+                ["host", host],
+                ["x-amz-content-sha256", payloadHash],
+                ["x-amz-date", amzDate]
+            ];
+            if (sessionToken) headerEntries.push(["x-amz-security-token", sessionToken]);
+            headerEntries.sort((a,b)=>a[0].localeCompare(b[0]));
+            const canonicalHeaders = headerEntries.map(([k,v])=>`${k}:${v}\n`).join("");
+            const signedHeaders = headerEntries.map(([k])=>k).join(";");
+            const canonicalRequest = ["POST", "/v1/speech", "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+            const credentialScope = `${dateStamp}/${region}/polly/aws4_request`;
+            const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, await sha256Hex(canonicalRequest)].join("\n");
+            const signingKey = await getAwsSignatureKey(secretKey, dateStamp, region, "polly");
+            const signature = hexFromBuffer(await hmacSha256(signingKey, stringToSign));
+            const authorization = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+            const headers = {
+                "Content-Type": "application/json",
+                "X-Amz-Content-Sha256": payloadHash,
+                "X-Amz-Date": amzDate,
+                "Authorization": authorization
+            };
+            if (sessionToken) headers["X-Amz-Security-Token"] = sessionToken;
+            const response = await fetch(url, { method: "POST", headers, body: payload, signal });
+            if (!response.ok) {
+                const errText = await response.text().catch(() => "");
+                throw new Error(`HTTP ${response.status}: ${errText.substring(0, 220)}`);
+            }
+            const buffer = await response.arrayBuffer();
+            if (outputFormat === "pcm") {
+                return { data: pcmBytesToWavDataUrl(new Uint8Array(buffer), 24000), mime: "audio/wav" };
+            }
+            const mime = outputFormat === "ogg_vorbis" ? "audio/ogg" : "audio/mpeg";
+            return { data: `data:${mime};base64,${arrayBufferToBase64(buffer)}`, mime };
+        }
+
+        async function requestTextToSpeech({ endpoint, apiKey, model, voice, format, input, signal, relay = null }) {
+            const styleInstruction = buildTtsStyleInstruction();
+            if (relay?.provider === "polly" || isAmazonPollyApiUrl(endpoint)) {
+                return requestAmazonPollySpeech({ relay, model, voice, format, input, signal });
+            }
+            if (isGoogleGeminiApiUrl(endpoint)) {
+                const base = normalizeGeminiApiBaseUrl(endpoint);
+                const cleanModel = String(model || DEFAULT_TTS_MODEL).replace(/^models\//, "");
+                if (!isGeminiTtsModel(cleanModel)) {
+                    throw new Error("当前选择的 Gemini 模型不是 TTS 模型，请选择 gemini-2.5-flash-preview-tts 或 gemini-2.5-pro-preview-tts");
+                }
+                const geminiVoice = voice && voice !== DEFAULT_TTS_VOICE ? voice : "Kore";
+                const url = `${base}/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+                const transcript = String(input || "").trim();
+                const payload = {
+                    contents: [{ parts: [{ text: `${styleInstruction}\nRead the following transcript aloud exactly as written. Only generate audio, do not answer or add any text.\n\nTranscript:\n${transcript}`.trim() }] }],
+                    generationConfig: {
+                        responseModalities: ["AUDIO"],
+                        speechConfig: {
+                            voiceConfig: {
+                                prebuiltVoiceConfig: { voiceName: geminiVoice }
+                            }
+                        }
+                    }
+                };
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                    signal
+                });
+                const data = await parseResponseAsJson(response);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(data).substring(0, 220)}`);
+                const audio = extractGeminiAudioFromApiResponse(data);
+                if (!audio) throw new Error("Gemini 语音接口未返回可解析音频");
+                return audio;
+            }
+
             const payload = { model, voice, input, response_format: format, format };
+            const speed = parseFloat(config.ttsSpeed || DEFAULT_TTS_SPEED);
+            if (Number.isFinite(speed) && Math.abs(speed - 1) > 0.01) payload.speed = Math.max(0.25, Math.min(4, speed));
+            if (styleInstruction) payload.instructions = styleInstruction;
             const response = await fetch(endpoint, {
                 method: "POST",
                 headers: {
@@ -5537,12 +6267,15 @@ ${packLines}`;
         }
 
         async function generateSpeechByCurrentRelay(text, signal) {
-            const relay = getActiveRelayByType("voice");
+            const relay = ensureVoiceRelayState(getActiveRelayByType("voice"));
             if (!relay) throw new Error("No available voice relay node found.");
-            if (!relay.apiKey) throw new Error("当前语音节点缺少 API Key");
+            if (!relay.apiKey) throw new Error(relay.provider==="polly" ? "当前 Polly 节点缺少 Access Key ID" : "当前语音节点缺少 API Key");
             const endpoint = getRelayVoiceSpeechApiUrl(relay);
-            const model = config.ttsModel || DEFAULT_TTS_MODEL;
-            const voice = config.ttsVoice || DEFAULT_TTS_VOICE;
+            const model = relay.activeModelId || config.ttsModel || DEFAULT_TTS_MODEL;
+            const voiceOptions = relay.provider === "polly" ? POLLY_TTS_VOICES : relay.provider === "gemini" ? GEMINI_TTS_VOICES : OPENAI_TTS_VOICES;
+            const voiceFallback = relay.provider === "polly" ? "Zhiyu" : relay.provider === "gemini" ? "Kore" : DEFAULT_TTS_VOICE;
+            const voice = voiceOptions.some(([value]) => value === config.ttsVoice) ? config.ttsVoice : voiceFallback;
+            config.ttsVoice = voice;
             const format = (config.ttsFormat || DEFAULT_TTS_FORMAT).toLowerCase();
             const result = await requestTextToSpeech({
                 endpoint,
@@ -5551,10 +6284,12 @@ ${packLines}`;
                 voice,
                 format,
                 input: text,
-                signal
+                signal,
+                relay
             });
 
-            const ext = format === "wav" ? "wav" : format === "ogg" ? "ogg" : "mp3";
+            const mime = String(result.mime || "").toLowerCase();
+            const ext = mime.includes("wav") ? "wav" : mime.includes("ogg") ? "ogg" : (format === "wav" ? "wav" : format === "ogg" ? "ogg" : "mp3");
             return {
                 type: "audio",
                 name: `tts-${Date.now()}.${ext}`,
@@ -6815,11 +7550,21 @@ ${packLines}`;
                     }
                 }else if(a.type==='audio'){
                     if(a.data&&a.data!=='[AUDIO_DATA_STRIPPED]'){
+                        const audioItem=document.createElement('div');
+                        audioItem.className='bubble-video-item';
                         const audio=document.createElement('audio');
                         audio.controls=true;
                         audio.preload='metadata';
                         audio.src=a.data;
-                        attDiv.appendChild(audio);
+                        audioItem.appendChild(audio);
+                        if(allowImageDownload){
+                            const dlBtn=document.createElement('button');
+                            dlBtn.className='bubble-video-download';
+                            dlBtn.textContent='下载';
+                            dlBtn.onclick=()=>downloadAudioAttachment(a.data,a.name);
+                            audioItem.appendChild(dlBtn);
+                        }
+                        attDiv.appendChild(audioItem);
                     }else{
                         const p=document.createElement('div');
                         p.className='bubble-attach-placeholder';
@@ -7593,7 +8338,11 @@ ${packLines}`;
                         const imageData=(a.data&&a.data!=='[IMAGE_DATA_STRIPPED]')?a.data:'';
                         return{type:a.type,name:a.name,size:a.size,data:imageData||'[IMAGE_DATA_STRIPPED]'};
                     }
-                    if(a.type==='audio')return{type:a.type,name:a.name,size:a.size,mime:a.mime,data:'[AUDIO_DATA_STRIPPED]'};
+                    if(a.type==='audio'){
+                        const raw=typeof a.data==='string'?a.data.trim():'';
+                        const kept=isSafeAttachmentUrl(raw)?raw:'';
+                        return{type:a.type,name:a.name,size:a.size,mime:a.mime,data:kept||'[AUDIO_DATA_STRIPPED]'};
+                    }
                     if(a.type==='video'){
                         const raw=typeof a.data==='string'?a.data.trim():'';
                         const kept=/^https?:\/\//i.test(raw)?raw:'';
@@ -7645,7 +8394,7 @@ ${packLines}`;
                 type=options;
                 opts={};
             }
-            type=type==="image"?"image":"chat";
+            type=type==="image"?"image":type==="voice"?"voice":type==="video"?"video":"chat";
             const { silentToast=false, auto=false } = opts || {};
             const ids=getModelManagerDomIds(type);
             const el=document.getElementById(ids.status);
@@ -7653,14 +8402,36 @@ ${packLines}`;
             if(el)el.textContent=auto?'正在自动获取模型...':'正在获取模型...';
             try{
                 const ctx=getFetchModelsContext(type);
-                if(!ctx || !ctx.relay)throw new Error(type==="image"?"No available image relay node.":"No available chat relay node.");
-                if(!ctx.apiKey)throw new Error(type==="image"?"Current image relay is missing API Key":"Current chat relay is missing API Key");
+                if(!ctx || !ctx.relay)throw new Error(`No available ${type} relay node.`);
+                if(type==="voice" && ctx.relay.provider==="polly"){
+                    const models=POLLY_TTS_ENGINES.map(item=>item.id);
+                    if(requestToken!==modelFetchTokenMap[type])return;
+                    ctx.relay.fetchedModels=models;
+                    ensureRelayModelStateByType(type, ctx.relay);
+                    const isActiveRelay=ctx.relay.id===getActiveRelayIdByType(type);
+                    if(isActiveRelay)syncLegacyModelStateByType(type, ctx.relay);
+                    persistConfig();
+                    if(el)el.textContent=`已加载 ${models.length} 个 Polly 引擎`;
+                    renderModelList(getModelSearchValue(type), type);
+                    if(currentPanel==='voice')populateModelSelect("voice");
+                    if(!silentToast)showToast(`已加载 ${models.length} 个语音引擎（${ctx.relay.name || ctx.relay.id}）`);
+                    return;
+                }
+                if(!ctx.apiKey)throw new Error(`Current ${type} relay is missing API Key`);
                 const base=getModelsApiBaseUrl(ctx.apiUrl, type);
-                const r=await fetch(base+'/models',{headers:{"Authorization":`Bearer ${ctx.apiKey}`}});
+                const isGemini=isGoogleGeminiApiUrl(base);
+                const modelsUrl=isGemini ? `${base}/models?key=${encodeURIComponent(ctx.apiKey)}` : `${base}/models`;
+                const r=await fetch(modelsUrl,isGemini?{}:{headers:{"Authorization":`Bearer ${ctx.apiKey}`}});
                 if(!r.ok)throw new Error(`HTTP ${r.status}`);
                 const data=await r.json();
                 let models=[];
-                if(data?.data&&Array.isArray(data.data))models=data.data.map(m=>m.id||m.name||'').filter(Boolean);
+                if(isGemini&&Array.isArray(data?.models))models=data.models
+                    .filter(m=>!Array.isArray(m.supportedGenerationMethods)||m.supportedGenerationMethods.includes("generateContent"))
+                    .map(m=>String(m.name||m.id||'').replace(/^models\//,''))
+                    .filter(id=>type!=="voice" || isGeminiTtsModel(id))
+                    .filter(Boolean);
+                else if(type==="voice" && ctx.relay.provider==="polly")models=POLLY_TTS_ENGINES.map(item=>item.id);
+                else if(data?.data&&Array.isArray(data.data))models=data.data.map(m=>m.id||m.name||'').filter(Boolean);
                 else if(Array.isArray(data))models=data.map(m=>typeof m==='string'?m:m.id||m.name||'').filter(Boolean);
                 models=normalizeFetchedModels(models);
                 if(requestToken!==modelFetchTokenMap[type])return;
@@ -7676,7 +8447,15 @@ ${packLines}`;
                     if(currentPanel==='image')populateModelSelect("image");
                     else updateModelHint();
                 }
-                if(!silentToast)showToast(`已加载 ${models.length} 个${type==="image"?"绘图":"对话"}模型（${ctx.relay.name || ctx.relay.id}）`);
+                if(type==="voice" && isActiveRelay){
+                    if(currentPanel==='voice')populateModelSelect("voice");
+                    else updateModelHint();
+                }
+                if(type==="video" && isActiveRelay){
+                    if(currentPanel==='video')populateModelSelect("video");
+                    else updateModelHint();
+                }
+                if(!silentToast)showToast(`已加载 ${models.length} 个${type==="image"?"绘图":type==="voice"?"语音":type==="video"?"视频":"对话"}模型（${ctx.relay.name || ctx.relay.id}）`);
             }catch(err){
                 if(requestToken!==modelFetchTokenMap[type])return;
                 if(el)el.textContent=`获取失败: ${err.message}`;
@@ -7693,7 +8472,7 @@ ${packLines}`;
         }
 
         function renderModelList(filter='', modelType='chat'){
-            const type=modelType==="image"?"image":"chat";
+            const type=modelType==="image"?"image":modelType==="voice"?"voice":modelType==="video"?"video":"chat";
             const ids=getModelManagerDomIds(type);
             const c=document.getElementById(ids.list);
             if(!c)return;
@@ -7720,11 +8499,11 @@ ${packLines}`;
         }
 
         function filterModels(modelType='chat'){
-            const type=modelType==="image"?"image":"chat";
+            const type=modelType==="image"?"image":modelType==="voice"?"voice":modelType==="video"?"video":"chat";
             renderModelList(getModelSearchValue(type), type);
         }
         function toggleModelSelection(id,selected,modelType='chat'){
-            const type=modelType==="image"?"image":"chat";
+            const type=modelType==="image"?"image":modelType==="voice"?"voice":modelType==="video"?"video":"chat";
             const relay=getModelTargetRelay(type);
             if(!relay)return;
             ensureRelayModelStateByType(type, relay);
@@ -7749,9 +8528,17 @@ ${packLines}`;
                 if(currentPanel==='image')populateModelSelect("image");
                 else updateModelHint();
             }
+            if(type==="voice" && isActiveRelay){
+                if(currentPanel==='voice')populateModelSelect("voice");
+                else updateModelHint();
+            }
+            if(type==="video" && isActiveRelay){
+                if(currentPanel==='video')populateModelSelect("video");
+                else updateModelHint();
+            }
         }
         function selectAllModels(all,modelType='chat'){
-            const type=modelType==="image"?"image":"chat";
+            const type=modelType==="image"?"image":modelType==="voice"?"voice":modelType==="video"?"video":"chat";
             const relay=getModelTargetRelay(type);
             if(!relay)return;
             ensureRelayModelStateByType(type, relay);
@@ -7767,9 +8554,17 @@ ${packLines}`;
                 if(currentPanel==='image')populateModelSelect("image");
                 else updateModelHint();
             }
+            if(type==="voice" && isActiveRelay){
+                if(currentPanel==='voice')populateModelSelect("voice");
+                else updateModelHint();
+            }
+            if(type==="video" && isActiveRelay){
+                if(currentPanel==='video')populateModelSelect("video");
+                else updateModelHint();
+            }
         }
         function addCustomModel(modelType='chat'){
-            const type=modelType==="image"?"image":"chat";
+            const type=modelType==="image"?"image":modelType==="voice"?"voice":modelType==="video"?"video":"chat";
             const id=prompt("输入模型 ID");
             if(!id?.trim())return;
             const mid=id.trim();
@@ -7790,6 +8585,14 @@ ${packLines}`;
             if(type==="chat" && isActiveRelay)populateModelSelect();
             if(type==="image" && isActiveRelay){
                 if(currentPanel==='image')populateModelSelect("image");
+                else updateModelHint();
+            }
+            if(type==="voice" && isActiveRelay){
+                if(currentPanel==='voice')populateModelSelect("voice");
+                else updateModelHint();
+            }
+            if(type==="video" && isActiveRelay){
+                if(currentPanel==='video')populateModelSelect("video");
                 else updateModelHint();
             }
             showToast(`已添加模型：${mid}`);
@@ -8312,7 +9115,11 @@ ${packLines}`;
                     name: "set-voice-relay-name",
                     note: "set-voice-relay-note",
                     apiUrl: "set-voice-api-url",
-                    apiKey: "set-voice-api-key"
+                    apiKey: "set-voice-api-key",
+                    provider: "set-voice-provider",
+                    region: "set-voice-region",
+                    secretKey: "set-voice-secret-key",
+                    sessionToken: "set-voice-session-token"
                 };
             }
             if(type==="video"){
@@ -8322,8 +9129,7 @@ ${packLines}`;
                     note: "set-video-relay-note",
                     apiUrl: "set-video-api-url",
                     apiKey: "set-video-api-key",
-                    provider: "set-video-provider",
-                    model: "set-video-model"
+                    provider: "set-video-provider"
                 };
             }
             return {
@@ -8343,6 +9149,49 @@ ${packLines}`;
             return normalizeChatApiUrl(apiUrl, DEFAULT_API_URL);
         }
 
+        function getVoiceProviderDefaults(provider, region = "us-east-1") {
+            const p = String(provider || "").trim().toLowerCase();
+            if (p === "gemini") return { apiUrl: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.5-flash-preview-tts", voice: "Kore" };
+            if (p === "polly") return { apiUrl: normalizePollyApiUrl(region), model: "neural", voice: "Zhiyu" };
+            return { apiUrl: DEFAULT_VOICE_API_URL, model: DEFAULT_TTS_MODEL, voice: DEFAULT_TTS_VOICE };
+        }
+
+        function updateVoiceProviderFieldVisibility(provider) {
+            const p = String(provider || document.getElementById("set-voice-provider")?.value || "openai").toLowerCase();
+            document.querySelectorAll("[data-voice-polly-field]").forEach(el => {
+                el.style.display = p === "polly" ? "" : "none";
+            });
+            const keyLabel = document.getElementById("set-voice-api-key-label");
+            const keyInput = document.getElementById("set-voice-api-key");
+            if (keyLabel) keyLabel.textContent = p === "polly" ? "Access Key ID" : "API Key";
+            if (keyInput) keyInput.placeholder = p === "polly" ? "AWS Access Key ID" : (p === "gemini" ? "Google Gemini API Key" : "sk-voice-xxxxxxxxxxxx");
+        }
+
+        function handleVoiceProviderInputChange() {
+            const ids = getSettingsRelayFieldIds("voice");
+            const provider = document.getElementById(ids.provider)?.value || "openai";
+            const regionInput = document.getElementById(ids.region);
+            const region = regionInput?.value || "us-east-1";
+            const defaults = getVoiceProviderDefaults(provider, region);
+            const apiUrlInput = document.getElementById(ids.apiUrl);
+            if (regionInput && provider === "polly" && !regionInput.value.trim()) regionInput.value = region;
+            if (apiUrlInput) apiUrlInput.value = defaults.apiUrl;
+            const relay = getVoiceRelayById(getSettingsEditingRelayId("voice"));
+            if (relay) {
+                relay.provider = provider;
+                relay.region = region;
+                relay.apiUrl = defaults.apiUrl;
+                relay.model = defaults.model;
+                relay.activeModelId = defaults.model;
+                ensureVoiceRelayState(relay);
+                if (currentPanel === "voice") populateModelSelect("voice");
+            }
+            if (!config.ttsVoice || provider !== "openai") config.ttsVoice = defaults.voice;
+            updateVoiceProviderFieldVisibility(provider);
+            syncQuickPanelParamsFromConfig();
+            scheduleSettingsAutoSave(80);
+        }
+
         function getVideoProviderDefaults(provider) {
             const p = String(provider || "").trim().toLowerCase();
             if (p === "vidu") return { apiUrl: "https://api.vidu.com", model: "viduq3-turbo" };
@@ -8356,9 +9205,7 @@ ${packLines}`;
             const provider = document.getElementById(ids.provider)?.value || "seedance";
             const defaults = getVideoProviderDefaults(provider);
             const apiUrlInput = document.getElementById(ids.apiUrl);
-            const modelInput = document.getElementById(ids.model);
             if (apiUrlInput && !apiUrlInput.value.trim()) apiUrlInput.value = defaults.apiUrl;
-            if (modelInput && !modelInput.value.trim()) modelInput.value = defaults.model;
             scheduleSettingsAutoSave(80);
         }
 
@@ -8373,20 +9220,31 @@ ${packLines}`;
             const noteInput = document.getElementById(ids.note);
             const apiUrlInput = document.getElementById(ids.apiUrl);
             const apiKeyInput = document.getElementById(ids.apiKey);
+            const providerSelect = ids.provider ? document.getElementById(ids.provider) : null;
+            const regionInput = ids.region ? document.getElementById(ids.region) : null;
+            const secretKeyInput = ids.secretKey ? document.getElementById(ids.secretKey) : null;
+            const sessionTokenInput = ids.sessionToken ? document.getElementById(ids.sessionToken) : null;
             if(!nameInput || !apiUrlInput || !apiKeyInput)return;
 
             relay.name = nameInput.value.trim() || relay.name || `${getRelayTypeLabel(type)}节点`;
             relay.note = noteInput ? noteInput.value.trim() : (relay.note || "");
             relay.apiUrl = normalizeRelayApiUrlByType(type, apiUrlInput.value.trim() || relay.apiUrl);
             relay.apiKey = apiKeyInput.value.trim();
-            if(type==="video"){
-                const providerSelect = ids.provider ? document.getElementById(ids.provider) : null;
-                const modelInput = ids.model ? document.getElementById(ids.model) : null;
+            if(type==="voice"){
                 if(providerSelect) relay.provider = String(providerSelect.value || "").trim().toLowerCase();
-                if(modelInput){
-                    const m=modelInput.value.trim();
-                    relay.model = m || getDefaultVideoModelByProvider(relay.provider);
+                if(regionInput) relay.region = regionInput.value.trim() || relay.region || "us-east-1";
+                if(secretKeyInput) relay.secretKey = secretKeyInput.value.trim();
+                if(sessionTokenInput) relay.sessionToken = sessionTokenInput.value.trim();
+                if(relay.provider==="polly"){
+                    relay.apiUrl = normalizePollyApiUrl(relay.region);
                 }
+                ensureVoiceRelayState(relay);
+                const voiceOptions = relay.provider === "polly" ? POLLY_TTS_VOICES : relay.provider === "gemini" ? GEMINI_TTS_VOICES : OPENAI_TTS_VOICES;
+                const voiceFallback = relay.provider === "polly" ? "Zhiyu" : relay.provider === "gemini" ? "Kore" : DEFAULT_TTS_VOICE;
+                if (!voiceOptions.some(([value]) => value === config.ttsVoice)) config.ttsVoice = voiceFallback;
+            }
+            if(type==="video"){
+                if(providerSelect) relay.provider = String(providerSelect.value || "").trim().toLowerCase();
                 ensureVideoRelayState(relay);
             }
             populateSettingsRelaySelect(type, relay.id);
@@ -8422,17 +9280,24 @@ ${packLines}`;
             const apiUrlInput = document.getElementById(ids.apiUrl);
             const apiKeyInput = document.getElementById(ids.apiKey);
             const providerSelect = ids.provider ? document.getElementById(ids.provider) : null;
-            const modelInput = ids.model ? document.getElementById(ids.model) : null;
+            const regionInput = ids.region ? document.getElementById(ids.region) : null;
+            const secretKeyInput = ids.secretKey ? document.getElementById(ids.secretKey) : null;
+            const sessionTokenInput = ids.sessionToken ? document.getElementById(ids.sessionToken) : null;
             if(nameInput) nameInput.value = relay.name || "";
             if(noteInput) noteInput.value = relay.note || "";
             if(apiUrlInput) apiUrlInput.value = relay.apiUrl || "";
             if(apiKeyInput) apiKeyInput.value = relay.apiKey || "";
-            if(providerSelect){
+            if(providerSelect && type==="video"){
                 const p=String(relay.provider||"seedance").toLowerCase();
                 providerSelect.value=["seedance","vidu","kling","veo"].includes(p)?p:"seedance";
             }
-            if(modelInput && type==="video"){
-                modelInput.value = relay.model || getDefaultVideoModelByProvider(relay.provider);
+            if(providerSelect && type==="voice"){
+                const p=String(relay.provider||"openai").toLowerCase();
+                providerSelect.value=["openai","gemini","polly"].includes(p)?p:"openai";
+                if(regionInput) regionInput.value = relay.region || "us-east-1";
+                if(secretKeyInput) secretKeyInput.value = relay.secretKey || "";
+                if(sessionTokenInput) sessionTokenInput.value = relay.sessionToken || "";
+                updateVoiceProviderFieldVisibility(providerSelect.value);
             }
         }
 
@@ -8440,7 +9305,7 @@ ${packLines}`;
             saveRelayFromSettings(type, settingsRelayEditingIds[type]);
             populateSettingsRelaySelect(type, relayId);
             fillRelaySettingsFields(type, relayId);
-            if(type==="chat" || type==="image"){
+            if(type==="chat" || type==="image" || type==="voice" || type==="video"){
                 const ids=getModelManagerDomIds(type);
                 const list=document.getElementById(ids.list);
                 const search=document.getElementById(ids.search);
@@ -8490,8 +9355,12 @@ ${packLines}`;
             }else if(type==="image"){
                 ensureImageRelayModelState(relay);
                 renderModelList(getModelSearchValue("image"), "image");
+            }else if(type==="voice"){
+                ensureVoiceRelayState(relay);
+                renderModelList(getModelSearchValue("voice"), "voice");
             }else if(type==="video"){
                 ensureVideoRelayState(relay);
+                renderModelList(getModelSearchValue("video"), "video");
             }
             scheduleSettingsAutoSave(80);
             showToast(`Added ${getRelayTypeLabel(type)} relay node`);
@@ -8528,6 +9397,13 @@ ${packLines}`;
                 renderModelList(getModelSearchValue("image"), "image");
                 if(currentPanel==='image')populateModelSelect("image");
                 else updateModelHint();
+            }else if(type==="voice" || type==="video"){
+                const relay=type==="voice" ? getVoiceRelayById(nextId) : getVideoRelayById(nextId);
+                syncLegacyModelStateByType(type, relay);
+                persistConfig();
+                renderModelList(getModelSearchValue(type), type);
+                if(currentPanel===type)populateModelSelect(type);
+                else updateModelHint();
             }
             scheduleSettingsAutoSave(80);
             showToast(`Removed ${getRelayTypeLabel(type)} relay node`);
@@ -8543,13 +9419,7 @@ ${packLines}`;
                 const selectedId = document.getElementById(ids.select)?.value || activeId;
                 fillRelaySettingsFields(type, selectedId);
             });
-            document.getElementById("set-tts-model").value=config.ttsModel||DEFAULT_TTS_MODEL;
-            document.getElementById("set-tts-voice").value=config.ttsVoice||DEFAULT_TTS_VOICE;
-            document.getElementById("set-tts-format").value=config.ttsFormat||DEFAULT_TTS_FORMAT;
-            const vd=document.getElementById("set-video-duration");
-            if(vd)vd.value=String(config.videoDuration||5);
-            const va=document.getElementById("set-video-aspect");
-            if(va)va.value=config.videoAspectRatio||"16:9";
+            syncQuickPanelParamsFromConfig();
             ensureSystemPromptState();
             populateSystemPromptProfileSelect(config.activeSystemPromptId);
             fillSystemPromptProfileInputs(config.activeSystemPromptId);
@@ -8571,6 +9441,8 @@ ${packLines}`;
             document.getElementById("projt-val").innerText=(config.projTotalMax||5)+'MB';
             renderModelList(getModelSearchValue("chat"), "chat");
             renderModelList(getModelSearchValue("image"), "image");
+            renderModelList(getModelSearchValue("voice"), "voice");
+            renderModelList(getModelSearchValue("video"), "video");
             currentPanelSettingsTab=PANEL_TYPES.includes(currentPanel)?currentPanel:"chat";
             switchTab('panels');
             switchPanelSettingsTab(currentPanelSettingsTab);
@@ -8587,6 +9459,18 @@ ${packLines}`;
                 const status=document.getElementById(getModelManagerDomIds("image").status);
                 if(status)status.textContent='正在自动获取当前节点模型...';
                 fetchModels({silentToast:true,auto:true},"image");
+            }
+            const voiceRelay=getVoiceRelayById(getSettingsEditingRelayId("voice"));
+            if((voiceRelay?.fetchedModels||[]).length===0){
+                const status=document.getElementById(getModelManagerDomIds("voice").status);
+                if(status)status.textContent='正在自动获取当前节点模型...';
+                fetchModels({silentToast:true,auto:true},"voice");
+            }
+            const videoRelay=getVideoRelayById(getSettingsEditingRelayId("video"));
+            if((videoRelay?.fetchedModels||[]).length===0){
+                const status=document.getElementById(getModelManagerDomIds("video").status);
+                if(status)status.textContent='正在自动获取当前节点模型...';
+                fetchModels({silentToast:true,auto:true},"video");
             }
         }
         function closeSettings(){
@@ -8613,9 +9497,8 @@ ${packLines}`;
             });
             saveSystemPromptProfileFromInputs(config.activeSystemPromptId);
             saveImagePromptTemplateFromSettings(settingsImageTemplateEditingId);
-            config.ttsModel=document.getElementById("set-tts-model").value.trim()||DEFAULT_TTS_MODEL;
-            config.ttsVoice=document.getElementById("set-tts-voice").value.trim()||DEFAULT_TTS_VOICE;
-            config.ttsFormat=(document.getElementById("set-tts-format").value.trim()||DEFAULT_TTS_FORMAT).toLowerCase();
+            saveQuickVoiceParams();
+            saveQuickVideoParams();
             const chatPresetRaw=String(document.getElementById("set-chat-style-preset")?.value || config.chatAppearance?.preset || "classic").trim();
             const nextUserBg=normalizeCssValue(document.getElementById("set-chat-user-bg")?.value, config.chatAppearance?.userBubbleBg || CHAT_STYLE_PRESETS.classic.userBubbleBg);
             const nextAiBg=normalizeCssValue(document.getElementById("set-chat-ai-bg")?.value, config.chatAppearance?.assistantBubbleBg || CHAT_STYLE_PRESETS.classic.assistantBubbleBg);
@@ -8666,16 +9549,12 @@ ${packLines}`;
                 overlay: Number.isFinite(nextBackgroundOverlay) ? nextBackgroundOverlay : (config.background?.overlay ?? 0.28),
                 blur: Number.isFinite(nextBackgroundBlur) ? nextBackgroundBlur : (config.background?.blur ?? 12)
             };
-            const nextVideoDuration=parseInt(document.getElementById("set-video-duration")?.value);
-            const nextVideoAspect=String(document.getElementById("set-video-aspect")?.value || "").trim();
             const nextTemperature=parseFloat(document.getElementById("set-temperature").value);
             const nextContextSize=parseInt(document.getElementById("set-context").value);
             const nextImgQuality=parseFloat(document.getElementById("set-img-quality").value);
             const nextImgMaxSize=parseInt(document.getElementById("set-img-maxsize").value);
             const nextProjFileMax=parseInt(document.getElementById("set-proj-filemax").value);
             const nextProjTotalMax=parseInt(document.getElementById("set-proj-totalmax").value);
-            if(Number.isFinite(nextVideoDuration))config.videoDuration=nextVideoDuration;
-            if(nextVideoAspect)config.videoAspectRatio=nextVideoAspect;
             if(Number.isFinite(nextTemperature))config.temperature=nextTemperature;
             if(Number.isFinite(nextContextSize))config.contextSize=nextContextSize;
             if(Number.isFinite(nextImgQuality))config.imgQuality=nextImgQuality;
@@ -8690,7 +9569,7 @@ ${packLines}`;
                 populateRelaySelect();
                 populateImageTemplateSelect(config.activeImagePromptTemplateId);
                 populateAppearanceSettingsFields();
-                if(currentPanel==='chat' || currentPanel==='image')populateModelSelect(currentPanel);
+                populateModelSelect(currentPanel);
                 switchPanel(currentPanel);
             }
             if(closeAfter)closeSettings();
@@ -8744,6 +9623,10 @@ ${packLines}`;
                 ttsModel:DEFAULT_TTS_MODEL,
                 ttsVoice:DEFAULT_TTS_VOICE,
                 ttsFormat:DEFAULT_TTS_FORMAT,
+                ttsSpeed:DEFAULT_TTS_SPEED,
+                ttsTone:DEFAULT_TTS_TONE,
+                ttsAccent:DEFAULT_TTS_ACCENT,
+                ttsInstructions:DEFAULT_TTS_INSTRUCTIONS,
                 videoDuration:5,
                 videoAspectRatio:"16:9",
                 imagePromptTemplates:[],
@@ -8807,6 +9690,14 @@ ${packLines}`;
         });
         initDraggableSessionFab();
         relaySelect.addEventListener("change",()=>{switchRelayById(relaySelect.value);});
+        quickTtsVoiceInput?.addEventListener("change", saveQuickVoiceParams);
+        quickTtsToneSelect?.addEventListener("change", saveQuickVoiceParams);
+        quickTtsSpeedInput?.addEventListener("input", saveQuickVoiceParams);
+        quickTtsAccentSelect?.addEventListener("change", saveQuickVoiceParams);
+        quickTtsFormatSelect?.addEventListener("change", saveQuickVoiceParams);
+        quickTtsInstructionsInput?.addEventListener("change", saveQuickVoiceParams);
+        quickVideoDurationInput?.addEventListener("change", saveQuickVideoParams);
+        quickVideoAspectSelect?.addEventListener("change", saveQuickVideoParams);
         modelSelect.addEventListener("change",()=>{
             if(currentPanel==='image'){
                 const relay=ensureImageRelayModelState(getActiveRelayByType("image"));
@@ -8823,6 +9714,40 @@ ${packLines}`;
                 updateModelHint();
                 const m=(relay?.selectedModels||[]).find(m=>m.id===modelSelect.value);
                 showToast(`🎨 已切换绘图模型：${m?(m.name||m.id):modelSelect.value}`);
+                return;
+            }
+            if(currentPanel==='voice'){
+                const relay=ensureVoiceRelayState(getActiveRelayByType("voice"));
+                if(relay){
+                    const selectedId=modelSelect.value;
+                    if(selectedId && !relay.selectedModels.find(m=>m.id===selectedId)){
+                        const tags=detectModelTags(selectedId);
+                        relay.selectedModels.push({id:selectedId,name:selectedId,vision:tags.includes('vision'),thinking:tags.includes('thinking'),imageGen:false});
+                    }
+                    relay.activeModelId=selectedId;
+                    syncLegacyModelStateByType("voice", relay);
+                    persistConfig();
+                }
+                updateModelHint();
+                const m=(relay?.selectedModels||[]).find(m=>m.id===modelSelect.value);
+                showToast(`🔊 已切换语音模型：${m?(m.name||m.id):modelSelect.value}`);
+                return;
+            }
+            if(currentPanel==='video'){
+                const relay=ensureVideoRelayState(getActiveRelayByType("video"));
+                if(relay){
+                    const selectedId=modelSelect.value;
+                    if(selectedId && !relay.selectedModels.find(m=>m.id===selectedId)){
+                        const tags=detectModelTags(selectedId);
+                        relay.selectedModels.push({id:selectedId,name:selectedId,vision:tags.includes('vision'),thinking:tags.includes('thinking'),imageGen:false});
+                    }
+                    relay.activeModelId=selectedId;
+                    syncLegacyModelStateByType("video", relay);
+                    persistConfig();
+                }
+                updateModelHint();
+                const m=(relay?.selectedModels||[]).find(m=>m.id===modelSelect.value);
+                showToast(`🎬 已切换视频模型：${m?(m.name||m.id):modelSelect.value}`);
                 return;
             }
             const relay=ensureChatRelayModelState(getActiveRelayByType("chat"));
