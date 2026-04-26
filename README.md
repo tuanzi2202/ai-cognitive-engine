@@ -15,15 +15,6 @@ python -m http.server 8000
 
 Then open `http://localhost:8000`.
 
-Option 3: ZenMux local proxy (fixes browser CORS issues for some endpoints like `/models`):
-
-```powershell
-cd C:\Users\Lenovo\Desktop\AI
-python zenmux_proxy_server.py 8787
-```
-
-Then open `http://127.0.0.1:8787` and set the in-app API base to `http://127.0.0.1:8787/api/v1`.
-
 ## Notes
 
 - API keys are **not** shipped in this repo. Configure them in the in-app Settings panel.
