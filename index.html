@@ -2793,10 +2793,18 @@
                 const firstUser = history.find(item => item && item.role === "user");
                 title = firstUser ? derivePanelSessionTitleFromMessage(panel, firstUser) : createPanelSessionTitle(panel, index);
             }
+            const relayId = String(session?.relayId || session?.relay || "").trim();
+            const imageModelId = panel === "image" ? String(session?.imageModelId || "").trim() : "";
+            const modelId = panel !== "image" ? String(session?.modelId || "").trim() : "";
+            const systemPromptId = panel === "chat" ? String(session?.systemPromptId || "").trim() : "";
             return {
                 id,
                 title,
                 manualTitle,
+                relayId,
+                ...(panel === "image" ? { imageModelId } : {}),
+                ...(panel !== "image" ? { modelId } : {}),
+                ...(panel === "chat" ? { systemPromptId } : {}),
                 history,
                 createdAt: Number.isFinite(session?.createdAt) ? session.createdAt : Date.now(),
                 updatedAt: Number.isFinite(session?.updatedAt) ? session.updatedAt : Date.now()
@@ -2943,9 +2951,14 @@
                         id: session.id,
                         title: session.title,
                         manualTitle: !!session.manualTitle,
+                        relayId: String(session.relayId || "").trim(),
+                        ...(panel === "image" ? { imageModelId: String(session.imageModelId || "").trim() } : {}),
+                        ...(panel !== "image" ? { modelId: String(session.modelId || "").trim() } : {}),
+                        ...(panel === "chat" ? { systemPromptId: String(session.systemPromptId || "").trim() } : {}),
                         createdAt: session.createdAt,
                         updatedAt: session.updatedAt,
-                        history: serializeHistoryForStorage(normalizeHistoryPayload(session.history))
+                        // Keep storage small: strip large attachments (esp. base64 images).
+                        history: serializeHistoryForStorage(normalizeHistoryPayload(session.history), true)
                     }))
                 };
             });
@@ -2960,12 +2973,54 @@
                 const payload = serializeSessionStateForStorage();
                 localStorage.setItem(PANEL_SESSION_STORAGE_KEY, JSON.stringify(payload));
                 PANEL_TYPES.forEach(item => localStorage.setItem(`${PANEL_SESSION_ACTIVE_PREFIX}${item}`, getPanelSessionState(item).activeId));
-                localStorage.setItem(getPanelHistoryStorageKey(key), JSON.stringify(serializeHistoryForStorage(activeSession.history)));
+                // Legacy per-panel mirror: store a compacted snapshot to avoid duplication blowups.
+                localStorage.setItem(getPanelHistoryStorageKey(key), JSON.stringify(serializeHistoryForStorage(activeSession.history, true)));
                 if (key === "chat") {
                     localStorage.setItem(CHAT_THREAD_STORAGE_KEY, JSON.stringify(payload.chat.sessions));
                     localStorage.setItem(CHAT_THREAD_ACTIVE_KEY, payload.chat.activeId);
                 }
             } catch (err) {
+                if(isQuotaExceededError(err)){
+                    try{
+                        const reduced={};
+                        PANEL_TYPES.forEach(panelKey=>{
+                            const state=getPanelSessionState(panelKey);
+                            reduced[panelKey]={
+                                activeId: state.activeId,
+                                sessions: getPanelSessionList(panelKey).map(session=>{
+                                    const history=serializeHistoryForStorage(normalizeHistoryPayload(session.history).slice(-12), true);
+                                    return{
+                                        id: session.id,
+                                        title: session.title,
+                                        manualTitle: !!session.manualTitle,
+                                        relayId: String(session.relayId || "").trim(),
+                                        ...(panelKey === "image" ? { imageModelId: String(session.imageModelId || "").trim() } : {}),
+                                        ...(panelKey !== "image" ? { modelId: String(session.modelId || "").trim() } : {}),
+                                        ...(panelKey === "chat" ? { systemPromptId: String(session.systemPromptId || "").trim() } : {}),
+                                        createdAt: session.createdAt,
+                                        updatedAt: session.updatedAt,
+                                        history
+                                    };
+                                })
+                            };
+                        });
+                        localStorage.setItem(PANEL_SESSION_STORAGE_KEY, JSON.stringify(reduced));
+                        PANEL_TYPES.forEach(item => localStorage.setItem(`${PANEL_SESSION_ACTIVE_PREFIX}${item}`, getPanelSessionState(item).activeId));
+                        localStorage.setItem(
+                            getPanelHistoryStorageKey(key),
+                            JSON.stringify(serializeHistoryForStorage(normalizeHistoryPayload(activeSession.history).slice(-12), true))
+                        );
+                        if (key === "chat") {
+                            localStorage.setItem(CHAT_THREAD_STORAGE_KEY, JSON.stringify(reduced.chat.sessions));
+                            localStorage.setItem(CHAT_THREAD_ACTIVE_KEY, reduced.chat.activeId);
+                        }
+                        showToast("⚠️ 本地存储空间不足：已自动压缩会话记录（每个会话仅保留最近 12 条）。建议导出备份并清理旧会话/大图片。", "warning");
+                        return;
+                    }catch(e2){
+                        showToast("⚠️ 会话保存失败：浏览器本地存储空间不足。建议导出备份并清理旧会话/大图片。", "error");
+                        return;
+                    }
+                }
                 showToast(`⚠️ 会话保存失败: ${err.message}`, "warning");
             }
         }
@@ -3658,8 +3713,29 @@
             return active;
         }
 
+        function resolveSystemPromptProfileId(maybeId) {
+            ensureSystemPromptState();
+            const requested = String(maybeId || "").trim();
+            if (requested && config.systemPrompts.some(item => item.id === requested)) return requested;
+            const fallback = String(config.activeSystemPromptId || "").trim();
+            if (fallback && config.systemPrompts.some(item => item.id === fallback)) return fallback;
+            return config.systemPrompts[0]?.id || "sp-default";
+        }
+
+        function ensureChatSessionSystemPromptId(session = getActivePanelSession("chat")) {
+            if (!session) return "";
+            const nextId = resolveSystemPromptProfileId(session.systemPromptId);
+            session.systemPromptId = nextId;
+            return nextId;
+        }
+
         function getActiveSystemPromptProfile() {
-            return ensureSystemPromptState();
+            ensureSystemPromptState();
+            const session = getActivePanelSession("chat");
+            const id = session ? resolveSystemPromptProfileId(session.systemPromptId) : resolveSystemPromptProfileId(config.activeSystemPromptId);
+            const profile = config.systemPrompts.find(item => item.id === id) || config.systemPrompts[0];
+            if (profile) profile.useEmojiPacks = profile.useEmojiPacks === true;
+            return profile;
         }
 
         function getActiveSystemPromptText() {
@@ -3696,7 +3772,7 @@
                 option.title = profile.prompt || "";
                 select.appendChild(option);
             });
-            const target = config.systemPrompts.find(item => item.id === selectedId)?.id || config.activeSystemPromptId || config.systemPrompts[0]?.id || "";
+            const target = resolveSystemPromptProfileId(selectedId);
             select.value = target;
             const currentName = config.systemPrompts.find(item => item.id === target)?.name || "未命名方案";
             select.title = `系统提示词方案：${currentName}`;
@@ -3709,6 +3785,8 @@
             if (!profile) return null;
             config.activeSystemPromptId = profile.id;
             config.systemPrompt = typeof profile.prompt === "string" ? profile.prompt : "";
+            const chatSession = getActivePanelSession("chat");
+            if (chatSession) chatSession.systemPromptId = profile.id;
             populateSystemPromptGlobalSelect(profile.id);
             if (syncSettings) {
                 fillSystemPromptProfileInputs(profile.id);
@@ -3717,7 +3795,10 @@
                 if (settingSelect) settingSelect.value = profile.id;
             }
             syncEmojiPickerAvailability();
-            if (persist) persistConfig();
+            if (persist){
+                persistPanelSessions("chat");
+                persistConfig();
+            }
             if (!silent) showToast(`已切换系统提示词方案：${profile.name}`);
             return profile;
         }
@@ -3876,6 +3957,27 @@
 
         function getActiveRelay(type = "chat") {
             return getActiveRelayByType(type);
+        }
+
+        function ensurePanelSessionRelayId(panel = currentPanel, session = getActivePanelSession(panel)) {
+            const type = ["chat", "image", "voice", "video"].includes(panel) ? panel : "chat";
+            if (!session) return "";
+            const relays = getRelaysByType(type);
+            if (!relays.length) {
+                session.relayId = "";
+                return "";
+            }
+
+            const requested = String(session.relayId || "").trim();
+            if (requested && relays.some(relay => relay.id === requested)) {
+                session.relayId = requested;
+                return requested;
+            }
+
+            const fallback = String(getActiveRelayIdByType(type) || "").trim();
+            const next = fallback && relays.some(relay => relay.id === fallback) ? fallback : relays[0].id;
+            session.relayId = next;
+            return next;
         }
 
         function applyActiveRelayToLegacyConfig() {
@@ -4266,10 +4368,39 @@
             applyActiveRelayToLegacyConfig();
         }
 
+        function isQuotaExceededError(err){
+            const name=String(err?.name||"");
+            const msg=String(err?.message||"");
+            return name==="QuotaExceededError"||/quota/i.test(msg)||/exceed/i.test(msg);
+        }
+
+        function getConfigForStorage(raw){
+            const cfg=(raw&&typeof raw==="object")?raw:{};
+            const stripRelay=(relay)=>{
+                if(!relay||typeof relay!=="object")return relay;
+                const next={...relay};
+                // Don't persist huge model lists; they are refetchable and can blow localStorage quota.
+                if(Array.isArray(next.fetchedModels))next.fetchedModels=[];
+                if(Array.isArray(next.availableModels))next.availableModels=[];
+                return next;
+            };
+            const clean={...cfg};
+            clean.fetchedModels=[];
+            if(Array.isArray(cfg.chatRelays))clean.chatRelays=cfg.chatRelays.map(stripRelay);
+            if(Array.isArray(cfg.imageRelays))clean.imageRelays=cfg.imageRelays.map(stripRelay);
+            if(Array.isArray(cfg.voiceRelays))clean.voiceRelays=cfg.voiceRelays.map(stripRelay);
+            if(Array.isArray(cfg.videoRelays))clean.videoRelays=cfg.videoRelays.map(stripRelay);
+            return clean;
+        }
+
         function persistConfig() {
             try {
-                localStorage.setItem("agi_config_v5", JSON.stringify(config));
+                localStorage.setItem("agi_config_v5", JSON.stringify(getConfigForStorage(config)));
             } catch (err) {
+                if(isQuotaExceededError(err)){
+                    showToast("⚠️ 设置保存失败：浏览器本地存储空间不足（常见原因：聊天里保存了大图片/base64、表情包 JSON 太大）。建议先导出备份，再清空部分会话/表情或换浏览器/非无痕模式。", "error");
+                    return;
+                }
                 showToast(`⚠️ 设置保存失败: ${err.message}`, "error");
             }
         }
@@ -4404,21 +4535,34 @@
         }
 
         function switchRelayById(relayId, silent = false, relayType = getCurrentPanelRelayType()) {
-            const relays = getRelaysByType(relayType);
+            const type = ["chat", "image", "voice", "video"].includes(relayType) ? relayType : getCurrentPanelRelayType();
+            const relays = getRelaysByType(type);
             const relay = relays.find(item => item.id === relayId);
             if (!relay) return;
-            setActiveRelayIdByType(relayType, relay.id);
+            setActiveRelayIdByType(type, relay.id);
             applyActiveRelayToLegacyConfig();
+            const session = getActivePanelSession(type);
+            if (session) session.relayId = relay.id;
+            persistPanelSessions(type);
             persistConfig();
             relaySelect.value = relay.id;
-            populateModelSelect(relayType);
-            if (!silent) showToast(`🌐 已切换${getRelayTypeLabel(relayType)}中转：${relay.name}`);
+            populateModelSelect(type);
+            if (!silent) showToast(`🌐 已切换${getRelayTypeLabel(type)}中转：${relay.name}`);
         }
 
         function populateModelSelect(modelType = "chat") {
             const type = modelType === "image" ? "image" : modelType === "voice" ? "voice" : modelType === "video" ? "video" : "chat";
             const relay = ensureRelayModelStateByType(type, getActiveRelayByType(type));
             const availableIds = new Set(relay?.fetchedModels || []);
+            const activeSession = getActivePanelSession(type);
+            const desiredImageModelId = type === "image" ? String(activeSession?.imageModelId || "").trim() : "";
+            const desiredSessionModelId = type !== "image" ? String(activeSession?.modelId || "").trim() : "";
+            if(type==="image" && relay && desiredImageModelId){
+                if(!relay.selectedModels.find(m=>m.id===desiredImageModelId)){
+                    const tags=detectModelTags(desiredImageModelId);
+                    relay.selectedModels.push({id:desiredImageModelId,name:desiredImageModelId,vision:tags.includes('vision'),thinking:tags.includes('thinking'),imageGen:true});
+                }
+            }
             const fallbackModelId = type === "voice"
                 ? (relay?.model || config.ttsModel || DEFAULT_TTS_MODEL)
                 : type === "video"
@@ -4431,7 +4575,9 @@
                 : normalizeSelectedModels(config.selectedModels, DEFAULT_SELECTED_MODELS);
             const selectedModels = relay?.selectedModels?.length > 0 ? relay.selectedModels : defaultSelected;
             let models = selectedModels.filter(item => availableIds.size === 0 || availableIds.has(item.id));
-            if (models.length === 0 && selectedModels.length > 0) models = [...selectedModels];
+            // If we successfully fetched an explicit model list, don't fall back to legacy/unknown ids.
+            // This prevents "model not found" when switching providers (e.g. ZenMux).
+            if (models.length === 0 && selectedModels.length > 0 && availableIds.size === 0) models = [...selectedModels];
             modelSelect.innerHTML = '';
             if(models.length===0){
                 const emptyOption=document.createElement('option');
@@ -4449,11 +4595,18 @@
                 opt.textContent = label;
                 modelSelect.appendChild(opt);
             });
-            let nextId = (relay?.activeModelId || "").trim();
+            let nextId = type === "image" ? desiredImageModelId : (desiredSessionModelId || (relay?.activeModelId || "").trim());
+            if (type === "image" && !nextId) nextId = (relay?.activeModelId || "").trim();
             if (!models.some(m => m.id === nextId)) nextId = models[0]?.id || "";
             if (nextId) {
                 modelSelect.value = nextId;
                 if (relay) relay.activeModelId = nextId;
+                if (type === "image" && activeSession && !desiredImageModelId) {
+                    activeSession.imageModelId = nextId;
+                }
+                if (type !== "image" && activeSession && !desiredSessionModelId) {
+                    activeSession.modelId = nextId;
+                }
             } else {
                 modelSelect.value = "";
                 if (relay) relay.activeModelId = "";
@@ -4734,6 +4887,11 @@
             if(imageTemplateWrap)imageTemplateWrap.style.display=currentPanel==='image'?'block':'none';
             if(imageTemplateManageBtn)imageTemplateManageBtn.style.display=currentPanel==='image'?'flex':'none';
             if(promptWrap)promptWrap.style.display=currentPanel==='chat'?'block':'none';
+            if(currentPanel==="chat"){
+                const pid=ensureChatSessionSystemPromptId(getActivePanelSession("chat"));
+                config.activeSystemPromptId=pid;
+                populateSystemPromptGlobalSelect(pid);
+            }
             syncQuickPanelParamsFromConfig();
             voiceParamRow?.classList.toggle('active', currentPanel === 'voice');
             videoParamRow?.classList.toggle('active', currentPanel === 'video');
@@ -4765,7 +4923,14 @@
 
             populateRelaySelect();
             populateImageTemplateSelect(config.activeImagePromptTemplateId);
-            populateModelSelect(currentPanel);
+            const session = getActivePanelSession(currentPanel);
+            const desiredRelayId = ensurePanelSessionRelayId(currentPanel, session);
+            const activeRelayId = String(getActiveRelayIdByType(currentPanel) || "").trim();
+            if (desiredRelayId && desiredRelayId !== activeRelayId) {
+                switchRelayById(desiredRelayId, true, currentPanel);
+            } else {
+                populateModelSelect(currentPanel);
+            }
             applyPanelSendButton();
             updateModelHint();
             render(currentPanel);
@@ -5687,8 +5852,12 @@ ${packLines}`;
             if (!relay) throw new Error("No available image relay node found.");
             if (!relay.apiKey) throw new Error("当前绘图节点缺少 API Key");
 
+            const sessionModelId=String(getActivePanelSession("image")?.imageModelId || "").trim();
+            const availableIds=new Set(Array.isArray(relay.fetchedModels)?relay.fetchedModels:[]);
+            const safeSessionModelId=sessionModelId && (availableIds.size===0 || availableIds.has(sessionModelId)) ? sessionModelId : "";
             const model = String(
-                relay.activeModelId
+                safeSessionModelId
+                || relay.activeModelId
                 || relay.selectedModels?.[0]?.id
                 || relay.fetchedModels?.[0]
                 || config.imageModel
@@ -7700,7 +7869,7 @@ ${packLines}`;
             }
             group.appendChild(bubble);
 
-            if(msg.role==='assistant'&&msg.content){
+            if(msg.role==='assistant'){
                 if(msg.elapsed){const el=document.createElement('div');el.className='elapsed-time';el.textContent=`⏱ ${(msg.elapsed/1000).toFixed(1)}s`;group.appendChild(el);}
                 const actions=document.createElement("div");actions.className="msg-actions";
                 const cb=document.createElement('button');cb.className='msg-action-btn';cb.innerHTML='📋复制';cb.onclick=()=>copyMessage(index,panel);
@@ -7936,6 +8105,40 @@ ${packLines}`;
                 createdAt:Date.now(),
                 updatedAt:Date.now()
             },sessions.length);
+            session.relayId = ensurePanelSessionRelayId(panel, session);
+            if(panel==="image"){
+                const relay=ensureImageRelayModelState(getActiveRelayByType("image"));
+                const selectedId=String(
+                    modelSelect?.value
+                    || relay?.activeModelId
+                    || relay?.selectedModels?.[0]?.id
+                    || relay?.fetchedModels?.[0]
+                    || config.imageModel
+                    || DEFAULT_IMAGE_MODEL
+                ).trim() || DEFAULT_IMAGE_MODEL;
+                session.imageModelId=selectedId;
+            }
+            if(panel!=="image"){
+                const type=panel==="voice"?"voice":panel==="video"?"video":"chat";
+                const relay=ensureRelayModelStateByType(type, getActiveRelayByType(type));
+                const fallbackModelId = type === "voice"
+                    ? (relay?.model || config.ttsModel || DEFAULT_TTS_MODEL)
+                    : type === "video"
+                    ? (relay?.model || getDefaultVideoModelByProvider(relay?.provider))
+                    : "";
+                const selectedId=String(
+                    modelSelect?.value
+                    || relay?.activeModelId
+                    || relay?.selectedModels?.[0]?.id
+                    || relay?.fetchedModels?.[0]
+                    || fallbackModelId
+                    || (type==="chat" ? (config.activeModelId || config.selectedModels?.[0]?.id || DEFAULT_SELECTED_MODELS[0].id) : "")
+                ).trim();
+                if(selectedId) session.modelId=selectedId;
+            }
+            if(panel==="chat"){
+                session.systemPromptId=ensureChatSessionSystemPromptId(getActivePanelSession("chat")) || resolveSystemPromptProfileId(config.activeSystemPromptId);
+            }
             sessions.push(session);
             state.sessions=sessions;
             if(switchTo)state.activeId=session.id;
@@ -7945,6 +8148,13 @@ ${packLines}`;
                 renderAttachments();
                 resetInputDraft();
                 closeEmojiPicker();
+                if(panel==="chat"){
+                    const pid=ensureChatSessionSystemPromptId(session);
+                    config.activeSystemPromptId=pid;
+                    populateSystemPromptGlobalSelect(pid);
+                    syncEmojiPickerAvailability();
+                }
+                populateModelSelect(panel);
                 render(panel);
                 updateMeta(panel);
                 applyPanelSendButton();
@@ -7968,6 +8178,20 @@ ${packLines}`;
             renderAttachments();
             resetInputDraft();
             closeEmojiPicker();
+            const desiredRelayId = ensurePanelSessionRelayId(panel, session);
+            const activeRelayId = String(getActiveRelayIdByType(panel) || "").trim();
+            let relaySwitched = false;
+            if (desiredRelayId && desiredRelayId !== activeRelayId) {
+                switchRelayById(desiredRelayId, true, panel);
+                relaySwitched = true;
+            }
+            if(panel==="chat"){
+                const pid=ensureChatSessionSystemPromptId(session);
+                config.activeSystemPromptId=pid;
+                populateSystemPromptGlobalSelect(pid);
+                syncEmojiPickerAvailability();
+            }
+            if(!relaySwitched) populateModelSelect(panel);
             persistPanelSessions(panel);
             render(panel);
             updateMeta(panel);
@@ -8021,6 +8245,23 @@ ${packLines}`;
                     syncActivePanelHistoryAlias(panel);
                 }
                 showToast("会话已删除");
+            }
+            if(panel==="chat" && (deletingActive || sessions.length===1)){
+                const pid=ensureChatSessionSystemPromptId(getActivePanelSession("chat"));
+                config.activeSystemPromptId=pid;
+                populateSystemPromptGlobalSelect(pid);
+                syncEmojiPickerAvailability();
+            }
+            if(deletingActive || sessions.length===1){
+                const activeSession=getActivePanelSession(panel);
+                const desiredRelayId = ensurePanelSessionRelayId(panel, activeSession);
+                const activeRelayId = String(getActiveRelayIdByType(panel) || "").trim();
+                let relaySwitched = false;
+                if (desiredRelayId && desiredRelayId !== activeRelayId) {
+                    switchRelayById(desiredRelayId, true, panel);
+                    relaySwitched = true;
+                }
+                if(!relaySwitched) populateModelSelect(panel);
             }
             persistPanelSessions(panel);
             renderChatThreadBar();
@@ -8335,8 +8576,13 @@ ${packLines}`;
                 if(!m.attachments)return m;
                 return{...m,attachments:m.attachments.map(a=>{
                     if(a.type==='image'){
-                        const imageData=(a.data&&a.data!=='[IMAGE_DATA_STRIPPED]')?a.data:'';
-                        return{type:a.type,name:a.name,size:a.size,data:imageData||'[IMAGE_DATA_STRIPPED]'};
+                        const raw=typeof a.data==='string'?a.data.trim():'';
+                        // Persist only small/URL-backed images. Large base64 images can easily exceed
+                        // localStorage quota and break settings/session saving.
+                        const keptUrl=/^https?:\/\//i.test(raw)?raw:'';
+                        const keepSmallData=/^data:image\//i.test(raw) && raw.length>0 && raw.length<=(compact?60000:120000);
+                        const kept=keptUrl || (keepSmallData?raw:'');
+                        return{type:a.type,name:a.name,size:a.size,data:kept||'[IMAGE_DATA_STRIPPED]'};
                     }
                     if(a.type==='audio'){
                         const raw=typeof a.data==='string'?a.data.trim():'';
@@ -8421,8 +8667,30 @@ ${packLines}`;
                 const base=getModelsApiBaseUrl(ctx.apiUrl, type);
                 const isGemini=isGoogleGeminiApiUrl(base);
                 const modelsUrl=isGemini ? `${base}/models?key=${encodeURIComponent(ctx.apiKey)}` : `${base}/models`;
-                const r=await fetch(modelsUrl,isGemini?{}:{headers:{"Authorization":`Bearer ${ctx.apiKey}`}});
-                if(!r.ok)throw new Error(`HTTP ${r.status}`);
+                let r=null;
+                if(isGemini){
+                    r=await fetch(modelsUrl);
+                }else{
+                    // Some providers (e.g. ZenMux) allow public GET /models but block CORS preflight for
+                    // Authorization headers on GET. Try no-auth first to avoid preflight, then fall back.
+                    try{
+                        r=await fetch(modelsUrl);
+                        if(!r.ok){
+                            r=await fetch(modelsUrl,{headers:{"Authorization":`Bearer ${ctx.apiKey}`}});
+                        }
+                    }catch(e){
+                        r=await fetch(modelsUrl,{headers:{"Authorization":`Bearer ${ctx.apiKey}`}});
+                    }
+                }
+                if(!r.ok){
+                    const txt=await r.text().catch(()=>"");
+                    let detail=txt;
+                    try{
+                        const j=txt?JSON.parse(txt):null;
+                        detail=j?.error?.message||j?.message||detail;
+                    }catch(e){}
+                    throw new Error(`HTTP ${r.status}: ${String(detail||"").substring(0,220)}`);
+                }
                 const data=await r.json();
                 let models=[];
                 if(isGemini&&Array.isArray(data?.models))models=data.models
@@ -8861,6 +9129,8 @@ ${packLines}`;
             const target=config.systemPrompts.find(item=>item.id===selectedId)?.id || config.activeSystemPromptId || config.systemPrompts[0]?.id || "";
             select.value=target;
             config.activeSystemPromptId=target;
+            const chatSession=getActivePanelSession("chat");
+            if(chatSession)chatSession.systemPromptId=target;
             populateSystemPromptGlobalSelect(target);
         }
 
@@ -8902,6 +9172,7 @@ ${packLines}`;
         function switchSystemPromptProfile(profileId){
             saveSystemPromptProfileFromInputs(config.activeSystemPromptId);
             fillSystemPromptProfileInputs(profileId);
+            persistPanelSessions("chat");
             scheduleSettingsAutoSave(80);
         }
 
@@ -8918,6 +9189,7 @@ ${packLines}`;
             };
             config.systemPrompts.push(profile);
             fillSystemPromptProfileInputs(profile.id);
+            persistPanelSessions("chat");
             scheduleSettingsAutoSave(80);
             showToast("已新增系统提示词方案");
         }
@@ -8932,6 +9204,7 @@ ${packLines}`;
             config.systemPrompts=config.systemPrompts.filter(item=>item.id!==currentId);
             const nextProfile=config.systemPrompts[0];
             fillSystemPromptProfileInputs(nextProfile?.id);
+            persistPanelSessions("chat");
             scheduleSettingsAutoSave(80);
             showToast("已删除当前系统提示词方案");
         }
@@ -9707,8 +9980,11 @@ ${packLines}`;
                         const tags=detectModelTags(selectedId);
                         relay.selectedModels.push({id:selectedId,name:selectedId,vision:tags.includes('vision'),thinking:tags.includes('thinking'),imageGen:true});
                     }
+                    const session=getActivePanelSession("image");
+                    if(session)session.imageModelId=String(selectedId || "").trim();
                     relay.activeModelId=selectedId;
                     syncLegacyImageModelConfigWithRelay(relay);
+                    persistPanelSessions("image");
                     persistConfig();
                 }
                 updateModelHint();
@@ -9724,8 +10000,11 @@ ${packLines}`;
                         const tags=detectModelTags(selectedId);
                         relay.selectedModels.push({id:selectedId,name:selectedId,vision:tags.includes('vision'),thinking:tags.includes('thinking'),imageGen:false});
                     }
+                    const session=getActivePanelSession("voice");
+                    if(session)session.modelId=String(selectedId || "").trim();
                     relay.activeModelId=selectedId;
                     syncLegacyModelStateByType("voice", relay);
+                    persistPanelSessions("voice");
                     persistConfig();
                 }
                 updateModelHint();
@@ -9741,8 +10020,11 @@ ${packLines}`;
                         const tags=detectModelTags(selectedId);
                         relay.selectedModels.push({id:selectedId,name:selectedId,vision:tags.includes('vision'),thinking:tags.includes('thinking'),imageGen:false});
                     }
+                    const session=getActivePanelSession("video");
+                    if(session)session.modelId=String(selectedId || "").trim();
                     relay.activeModelId=selectedId;
                     syncLegacyModelStateByType("video", relay);
+                    persistPanelSessions("video");
                     persistConfig();
                 }
                 updateModelHint();
@@ -9754,6 +10036,9 @@ ${packLines}`;
             if(relay){
                 relay.activeModelId=modelSelect.value;
                 syncLegacyModelConfigWithRelay(relay);
+                const session=getActivePanelSession("chat");
+                if(session)session.modelId=String(modelSelect.value || "").trim();
+                persistPanelSessions("chat");
                 persistConfig();
             }
             updateModelHint();
