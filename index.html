@@ -2784,6 +2784,18 @@
             return derivePanelSessionTitleFromMessage("chat", msg);
         }
 
+        function normalizePanelSessionSettings(panel = "chat", settings, session = null) {
+            const source = settings && typeof settings === "object" ? settings : {};
+            const legacy = session && typeof session === "object" ? session : {};
+            return {
+                relayId: String(source.relayId || legacy.relayId || "").trim(),
+                modelId: String(source.modelId || legacy.modelId || "").trim(),
+                systemPromptId: panel === "chat"
+                    ? String(source.systemPromptId || legacy.systemPromptId || "").trim()
+                    : ""
+            };
+        }
+
         function normalizePanelSession(panel = "chat", session, index = 0) {
             const history = normalizeHistoryPayload(session?.history);
             const id = String(session?.id || "").trim() || createPanelSessionId(panel);
@@ -2798,6 +2810,7 @@
                 title,
                 manualTitle,
                 history,
+                settings: normalizePanelSessionSettings(panel, session?.settings || session?.preferences, session),
                 createdAt: Number.isFinite(session?.createdAt) ? session.createdAt : Date.now(),
                 updatedAt: Number.isFinite(session?.updatedAt) ? session.updatedAt : Date.now()
             };
@@ -2896,6 +2909,57 @@
             return sessions.find(session => session.id === state.activeId) || sessions[0] || null;
         }
 
+        function ensurePanelSessionSettings(panel = currentPanel, session = getActivePanelSession(panel)) {
+            if (!session || typeof session !== "object") {
+                return normalizePanelSessionSettings(panel, null);
+            }
+            session.settings = normalizePanelSessionSettings(panel, session.settings || session.preferences, session);
+            return session.settings;
+        }
+
+        function getActivePanelSessionSettings(panel = currentPanel) {
+            return ensurePanelSessionSettings(panel, getActivePanelSession(panel));
+        }
+
+        function setActivePanelSessionRelayPreference(panel = currentPanel, relayId = "", options = {}) {
+            const { touch = true } = options || {};
+            const session = getActivePanelSession(panel);
+            if (!session) return "";
+            const settings = ensurePanelSessionSettings(panel, session);
+            settings.relayId = String(relayId || "").trim();
+            if (touch) session.updatedAt = Date.now();
+            return settings.relayId;
+        }
+
+        function setActivePanelSessionModelPreference(panel = currentPanel, modelId = "", options = {}) {
+            const { touch = true } = options || {};
+            const session = getActivePanelSession(panel);
+            if (!session) return "";
+            const settings = ensurePanelSessionSettings(panel, session);
+            settings.modelId = String(modelId || "").trim();
+            if (touch) session.updatedAt = Date.now();
+            return settings.modelId;
+        }
+
+        function setActivePanelSessionSystemPromptPreference(systemPromptId = "", options = {}) {
+            const { touch = true } = options || {};
+            const session = getActivePanelSession("chat");
+            if (!session) return "";
+            const settings = ensurePanelSessionSettings("chat", session);
+            settings.systemPromptId = String(systemPromptId || "").trim();
+            if (touch) session.updatedAt = Date.now();
+            return settings.systemPromptId;
+        }
+
+        function clonePanelSessionSettings(panel = currentPanel, session = getActivePanelSession(panel)) {
+            const settings = ensurePanelSessionSettings(panel, session);
+            return {
+                relayId: settings.relayId,
+                modelId: settings.modelId,
+                systemPromptId: panel === "chat" ? settings.systemPromptId : ""
+            };
+        }
+
         function getActivePanelSessionHistory(panel = currentPanel) {
             return getActivePanelSession(panel)?.history || [];
         }
@@ -2943,6 +3007,7 @@
                         id: session.id,
                         title: session.title,
                         manualTitle: !!session.manualTitle,
+                        settings: normalizePanelSessionSettings(panel, session?.settings, session),
                         createdAt: session.createdAt,
                         updatedAt: session.updatedAt,
                         history: serializeHistoryForStorage(normalizeHistoryPayload(session.history))
@@ -3646,12 +3711,14 @@
 
         function ensureSystemPromptState() {
             config.systemPrompts = normalizeSystemPromptProfiles(config.systemPrompts, config.systemPrompt);
-            const activeId = String(config.activeSystemPromptId || "").trim();
-            if (!config.systemPrompts.find(item => item.id === activeId)) {
+            const chatSettings = getActivePanelSessionSettings("chat");
+            const preferredId = String(chatSettings.systemPromptId || config.activeSystemPromptId || "").trim();
+            if (!config.systemPrompts.find(item => item.id === preferredId)) {
                 config.activeSystemPromptId = config.systemPrompts[0].id;
             } else {
-                config.activeSystemPromptId = activeId;
+                config.activeSystemPromptId = preferredId;
             }
+            chatSettings.systemPromptId = config.activeSystemPromptId;
             const active = config.systemPrompts.find(item => item.id === config.activeSystemPromptId) || config.systemPrompts[0];
             config.systemPrompt = typeof active?.prompt === "string" ? active.prompt : "";
             active.useEmojiPacks = active.useEmojiPacks === true;
@@ -3708,6 +3775,7 @@
             const profile = config.systemPrompts.find(item => item.id === profileId) || config.systemPrompts[0];
             if (!profile) return null;
             config.activeSystemPromptId = profile.id;
+            setActivePanelSessionSystemPromptPreference(profile.id, { touch: true });
             config.systemPrompt = typeof profile.prompt === "string" ? profile.prompt : "";
             populateSystemPromptGlobalSelect(profile.id);
             if (syncSettings) {
@@ -3717,7 +3785,10 @@
                 if (settingSelect) settingSelect.value = profile.id;
             }
             syncEmojiPickerAvailability();
-            if (persist) persistConfig();
+            if (persist) {
+                persistConfig();
+                persistPanelSessions("chat");
+            }
             if (!silent) showToast(`已切换系统提示词方案：${profile.name}`);
             return profile;
         }
@@ -3849,25 +3920,93 @@
             else config.chatRelays = relays;
         }
 
+        function getStoredActiveRelayIdByType(type) {
+            if (type === "image") return String(config.activeImageRelayId || "").trim();
+            if (type === "voice") return String(config.activeVoiceRelayId || "").trim();
+            if (type === "video") return String(config.activeVideoRelayId || "").trim();
+            return String(config.activeChatRelayId || "").trim();
+        }
+
+        function setStoredActiveRelayIdByType(type, relayId) {
+            const value = String(relayId || "").trim();
+            if (type === "image") config.activeImageRelayId = value;
+            else if (type === "voice") config.activeVoiceRelayId = value;
+            else if (type === "video") config.activeVideoRelayId = value;
+            else config.activeChatRelayId = value;
+        }
+
+        function resolveRelayModelIdByType(type, relay, preferredId = "") {
+            const key = type === "image" ? "image" : type === "voice" ? "voice" : type === "video" ? "video" : "chat";
+            const targetRelay = ensureRelayModelStateByType(key, relay);
+            if (!targetRelay) return "";
+            const selectedIds = (targetRelay.selectedModels || []).map(item => String(item?.id || "").trim()).filter(Boolean);
+            const fetchedIds = (targetRelay.fetchedModels || []).map(item => String(item || "").trim()).filter(Boolean);
+            const candidates = Array.from(new Set([...selectedIds, ...fetchedIds]));
+            const voiceFallback = String(targetRelay.model || targetRelay.activeModelId || config.ttsModel || DEFAULT_TTS_MODEL).trim() || DEFAULT_TTS_MODEL;
+            const videoFallback = String(targetRelay.model || targetRelay.activeModelId || getDefaultVideoModelByProvider(targetRelay.provider)).trim() || getDefaultVideoModelByProvider(targetRelay.provider);
+            const imageFallback = String(targetRelay.activeModelId || targetRelay.selectedModels?.[0]?.id || targetRelay.fetchedModels?.[0] || config.imageModel || DEFAULT_IMAGE_MODEL).trim() || DEFAULT_IMAGE_MODEL;
+            const chatFallback = String(targetRelay.activeModelId || targetRelay.selectedModels?.[0]?.id || targetRelay.fetchedModels?.[0] || config.activeModelId || "").trim();
+            const fallback = key === "image" ? imageFallback : key === "voice" ? voiceFallback : key === "video" ? videoFallback : chatFallback;
+            let modelId = String(preferredId || "").trim() || String(targetRelay.activeModelId || "").trim() || fallback;
+            if (candidates.length > 0 && !candidates.includes(modelId)) {
+                const fallbackInCandidates = fallback && candidates.includes(fallback) ? fallback : "";
+                modelId = fallbackInCandidates || candidates[0] || "";
+            }
+            if (!modelId && candidates.length > 0) modelId = candidates[0];
+            return modelId;
+        }
+
         function getActiveRelayIdByType(type) {
-            if (type === "image") return config.activeImageRelayId;
-            if (type === "voice") return config.activeVoiceRelayId;
-            if (type === "video") return config.activeVideoRelayId;
-            return config.activeChatRelayId;
+            const key = type === "image" ? "image" : type === "voice" ? "voice" : type === "video" ? "video" : "chat";
+            const relays = getRelaysByType(key);
+            if (!relays.length) return "";
+            const settings = getActivePanelSessionSettings(key);
+            const storedId = getStoredActiveRelayIdByType(key);
+            let relayId = String(settings.relayId || storedId || "").trim();
+            if (!relays.some(relay => relay.id === relayId)) {
+                relayId = relays.some(relay => relay.id === storedId) ? storedId : relays[0].id;
+            }
+            settings.relayId = relayId;
+            setStoredActiveRelayIdByType(key, relayId);
+            return relayId;
         }
 
         function setActiveRelayIdByType(type, relayId) {
-            if (type === "image") config.activeImageRelayId = relayId;
-            else if (type === "voice") config.activeVoiceRelayId = relayId;
-            else if (type === "video") config.activeVideoRelayId = relayId;
-            else config.activeChatRelayId = relayId;
+            const key = type === "image" ? "image" : type === "voice" ? "voice" : type === "video" ? "video" : "chat";
+            const relays = getRelaysByType(key);
+            if (!relays.length) {
+                setStoredActiveRelayIdByType(key, "");
+                setActivePanelSessionRelayPreference(key, "", { touch: false });
+                setActivePanelSessionModelPreference(key, "", { touch: false });
+                return;
+            }
+            const nextId = relays.find(relay => relay.id === relayId)?.id || relays[0].id;
+            setStoredActiveRelayIdByType(key, nextId);
+            setActivePanelSessionRelayPreference(key, nextId, { touch: true });
+            const relay = relays.find(item => item.id === nextId) || relays[0];
+            const settings = getActivePanelSessionSettings(key);
+            const nextModelId = resolveRelayModelIdByType(key, relay, settings.modelId);
+            if (relay) {
+                relay.activeModelId = nextModelId;
+                if (key === "voice" || key === "video") relay.model = nextModelId || relay.model;
+                if (key === "voice") relay.ttsModel = relay.model;
+            }
+            setActivePanelSessionModelPreference(key, nextModelId, { touch: false });
         }
 
         function getActiveRelayByType(type) {
-            const relays = getRelaysByType(type);
+            const key = type === "image" ? "image" : type === "voice" ? "voice" : type === "video" ? "video" : "chat";
+            const relays = getRelaysByType(key);
             if (!relays.length) return null;
-            const activeId = getActiveRelayIdByType(type);
-            return relays.find(relay => relay.id === activeId) || relays[0];
+            const activeId = getActiveRelayIdByType(key);
+            const relay = relays.find(item => item.id === activeId) || relays[0];
+            const settings = getActivePanelSessionSettings(key);
+            const modelId = resolveRelayModelIdByType(key, relay, settings.modelId);
+            relay.activeModelId = modelId;
+            if (key === "voice" || key === "video") relay.model = modelId || relay.model;
+            if (key === "voice") relay.ttsModel = relay.model;
+            settings.modelId = modelId;
+            return relay;
         }
 
         function getCurrentPanelRelayType() {
@@ -4266,6 +4405,37 @@
             applyActiveRelayToLegacyConfig();
         }
 
+        function seedPanelSessionSettingsFromConfig(options = {}) {
+            const { force = false } = options || {};
+            PANEL_TYPES.forEach(panel => {
+                const key = PANEL_TYPES.includes(panel) ? panel : "chat";
+                const relays = getRelaysByType(key);
+                const storedRelayId = getStoredActiveRelayIdByType(key);
+                const defaultRelay = relays.find(relay => relay.id === storedRelayId) || relays[0] || null;
+                const defaultRelayId = defaultRelay?.id || "";
+                const sessions = getPanelSessionList(key);
+                sessions.forEach(session => {
+                    const settings = ensurePanelSessionSettings(key, session);
+                    let relayId = String(settings.relayId || "").trim();
+                    if (force || !relayId || !relays.some(relay => relay.id === relayId)) relayId = defaultRelayId;
+                    settings.relayId = relayId;
+                    const relay = relays.find(item => item.id === relayId) || defaultRelay;
+                    const preferredModel = force ? "" : settings.modelId;
+                    const resolvedModelId = resolveRelayModelIdByType(key, relay, preferredModel);
+                    settings.modelId = resolvedModelId;
+                    if (key === "chat") {
+                        const profileIds = (config.systemPrompts || []).map(item => item.id);
+                        let profileId = String(settings.systemPromptId || "").trim();
+                        if (force || !profileId || !profileIds.includes(profileId)) profileId = String(config.activeSystemPromptId || profileIds[0] || "").trim();
+                        settings.systemPromptId = profileId;
+                    } else {
+                        settings.systemPromptId = "";
+                    }
+                });
+            });
+            ensureSystemPromptState();
+        }
+
         function persistConfig() {
             try {
                 localStorage.setItem("agi_config_v5", JSON.stringify(config));
@@ -4275,6 +4445,8 @@
         }
 
         normalizeConfigStructure();
+        seedPanelSessionSettingsFromConfig();
+        persistPanelSessions(currentPanel);
 
         let pendingAttachments = [];
         let codeBlockIdCounter = 0;
@@ -4410,6 +4582,7 @@
             setActiveRelayIdByType(relayType, relay.id);
             applyActiveRelayToLegacyConfig();
             persistConfig();
+            persistPanelSessions(relayType);
             relaySelect.value = relay.id;
             populateModelSelect(relayType);
             if (!silent) showToast(`🌐 已切换${getRelayTypeLabel(relayType)}中转：${relay.name}`);
@@ -4458,6 +4631,7 @@
                 modelSelect.value = "";
                 if (relay) relay.activeModelId = "";
             }
+            setActivePanelSessionModelPreference(type, nextId, { touch: false });
             if (relay) syncLegacyModelStateByType(type, relay);
             updateModelHint();
         }
@@ -4761,13 +4935,9 @@
                 if(emojiBtn)emojiBtn.style.display='flex';
                 if(inputWrap){inputWrap.style.setProperty('--input-divider-left','112px');inputWrap.style.setProperty('--input-content-left','122px');}
             }
-            syncEmojiPickerAvailability();
-
-            populateRelaySelect();
+            syncPanelSessionScopedSelections(currentPanel);
             populateImageTemplateSelect(config.activeImagePromptTemplateId);
-            populateModelSelect(currentPanel);
             applyPanelSendButton();
-            updateModelHint();
             render(currentPanel);
         }
 
@@ -7923,16 +8093,35 @@ ${packLines}`;
             });
         }
 
+        function syncPanelSessionScopedSelections(panel = currentPanel, options = {}) {
+            const { refreshControls = true } = options || {};
+            const key = PANEL_TYPES.includes(panel) ? panel : "chat";
+            getActiveRelayByType(key);
+            if (key === "chat") {
+                ensureSystemPromptState();
+            }
+            if (!refreshControls || key !== currentPanel) return;
+            populateRelaySelect();
+            if (key === "chat") {
+                populateSystemPromptGlobalSelect(config.activeSystemPromptId);
+            }
+            populateModelSelect(key);
+            updateModelHint();
+            syncEmojiPickerAvailability();
+        }
+
         function createChatThread(options={}){
             const { title="", switchTo=true } = options || {};
             const panel=currentPanel;
             const state=getPanelSessionState(panel);
             const sessions=getPanelSessionList(panel);
+            const inheritedSettings = clonePanelSessionSettings(panel, getActivePanelSession(panel));
             const session=normalizePanelSession(panel,{
                 id:createPanelSessionId(panel),
                 title:title || createPanelSessionTitle(panel,sessions.length),
                 manualTitle: !!title,
                 history:[],
+                settings: inheritedSettings,
                 createdAt:Date.now(),
                 updatedAt:Date.now()
             },sessions.length);
@@ -7941,6 +8130,7 @@ ${packLines}`;
             if(switchTo)state.activeId=session.id;
             syncActivePanelHistoryAlias(panel);
             if(switchTo){
+                syncPanelSessionScopedSelections(panel);
                 pendingAttachments=[];
                 renderAttachments();
                 resetInputDraft();
@@ -7964,6 +8154,7 @@ ${packLines}`;
             if(session.id===state.activeId)return;
             state.activeId=session.id;
             syncActivePanelHistoryAlias(panel);
+            syncPanelSessionScopedSelections(panel);
             pendingAttachments=[];
             renderAttachments();
             resetInputDraft();
@@ -8025,6 +8216,7 @@ ${packLines}`;
             persistPanelSessions(panel);
             renderChatThreadBar();
             if(deletingActive || sessions.length===1){
+                syncPanelSessionScopedSelections(panel);
                 pendingAttachments=[];
                 renderAttachments();
                 resetInputDraft();
@@ -8861,6 +9053,7 @@ ${packLines}`;
             const target=config.systemPrompts.find(item=>item.id===selectedId)?.id || config.activeSystemPromptId || config.systemPrompts[0]?.id || "";
             select.value=target;
             config.activeSystemPromptId=target;
+            setActivePanelSessionSystemPromptPreference(target, { touch: false });
             populateSystemPromptGlobalSelect(target);
         }
 
@@ -8878,6 +9071,7 @@ ${packLines}`;
             profile.prompt=String(promptInput?.value ?? "");
             profile.useEmojiPacks=useEmojiInput ? !!useEmojiInput.checked : profile.useEmojiPacks === true;
             config.activeSystemPromptId=profile.id;
+            setActivePanelSessionSystemPromptPreference(profile.id, { touch: false });
             config.systemPrompt=profile.prompt;
             populateSystemPromptProfileSelect(profile.id);
             syncEmojiPickerAvailability();
@@ -8888,6 +9082,7 @@ ${packLines}`;
             const profile=config.systemPrompts.find(item=>item.id===profileId) || config.systemPrompts[0];
             if(!profile)return;
             config.activeSystemPromptId=profile.id;
+            setActivePanelSessionSystemPromptPreference(profile.id, { touch: false });
             config.systemPrompt=profile.prompt;
             populateSystemPromptProfileSelect(profile.id);
             const nameInput=document.getElementById("set-system-profile-name");
@@ -9565,11 +9760,9 @@ ${packLines}`;
             applyActiveRelayToLegacyConfig();
             applyAppearanceSettings();
             persistConfig();
+            persistPanelSessions(currentPanel);
             if(refreshUI){
-                populateRelaySelect();
-                populateImageTemplateSelect(config.activeImagePromptTemplateId);
                 populateAppearanceSettingsFields();
-                populateModelSelect(currentPanel);
                 switchPanel(currentPanel);
             }
             if(closeAfter)closeSettings();
@@ -9661,10 +9854,10 @@ ${packLines}`;
                 activeVideoRelayId:"video-relay-seedance"
             };
             normalizeConfigStructure();
+            seedPanelSessionSettingsFromConfig({ force: true });
             applyAppearanceSettings();
             persistConfig();
-            populateRelaySelect();
-            populateModelSelect();
+            persistPanelSessions(currentPanel);
             switchPanel(currentPanel);
             openSettings();
             showToast("Settings reset to defaults");
@@ -9708,8 +9901,10 @@ ${packLines}`;
                         relay.selectedModels.push({id:selectedId,name:selectedId,vision:tags.includes('vision'),thinking:tags.includes('thinking'),imageGen:true});
                     }
                     relay.activeModelId=selectedId;
+                    setActivePanelSessionModelPreference("image", selectedId, { touch: true });
                     syncLegacyImageModelConfigWithRelay(relay);
                     persistConfig();
+                    persistPanelSessions("image");
                 }
                 updateModelHint();
                 const m=(relay?.selectedModels||[]).find(m=>m.id===modelSelect.value);
@@ -9725,8 +9920,10 @@ ${packLines}`;
                         relay.selectedModels.push({id:selectedId,name:selectedId,vision:tags.includes('vision'),thinking:tags.includes('thinking'),imageGen:false});
                     }
                     relay.activeModelId=selectedId;
+                    setActivePanelSessionModelPreference("voice", selectedId, { touch: true });
                     syncLegacyModelStateByType("voice", relay);
                     persistConfig();
+                    persistPanelSessions("voice");
                 }
                 updateModelHint();
                 const m=(relay?.selectedModels||[]).find(m=>m.id===modelSelect.value);
@@ -9742,8 +9939,10 @@ ${packLines}`;
                         relay.selectedModels.push({id:selectedId,name:selectedId,vision:tags.includes('vision'),thinking:tags.includes('thinking'),imageGen:false});
                     }
                     relay.activeModelId=selectedId;
+                    setActivePanelSessionModelPreference("video", selectedId, { touch: true });
                     syncLegacyModelStateByType("video", relay);
                     persistConfig();
+                    persistPanelSessions("video");
                 }
                 updateModelHint();
                 const m=(relay?.selectedModels||[]).find(m=>m.id===modelSelect.value);
@@ -9753,8 +9952,10 @@ ${packLines}`;
             const relay=ensureChatRelayModelState(getActiveRelayByType("chat"));
             if(relay){
                 relay.activeModelId=modelSelect.value;
+                setActivePanelSessionModelPreference("chat", modelSelect.value, { touch: true });
                 syncLegacyModelConfigWithRelay(relay);
                 persistConfig();
+                persistPanelSessions("chat");
             }
             updateModelHint();
             if(currentPanel==='chat'){
