@@ -2395,9 +2395,112 @@
             return payload.filter(item => item && typeof item === "object");
         }
 
+        // ─────────────────────────────────────────
+        // Large history persistence (IndexedDB)
+        // localStorage is intentionally kept small to avoid QuotaExceededError.
+        // ─────────────────────────────────────────
+        const HISTORY_IDB_DB_NAME = "agi_history_v5";
+        const HISTORY_IDB_DB_VERSION = 1;
+        const HISTORY_IDB_STORE_SESSION_HISTORIES = "session_histories";
+        const HISTORY_IDB_STORE_META = "meta";
+        const HISTORY_IDB_META_KEY_MIGRATED = "migrated_from_localstorage_v5";
+
+        function isIndexedDbUsable() {
+            try { return typeof indexedDB !== "undefined" && !!indexedDB; } catch (e) { return false; }
+        }
+
+        function idbRequestToPromise(req) {
+            return new Promise((resolve, reject) => {
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error || new Error("IndexedDB request failed"));
+            });
+        }
+
+        function idbTxDone(tx) {
+            return new Promise((resolve, reject) => {
+                tx.oncomplete = () => resolve();
+                tx.onabort = () => reject(tx.error || new Error("IndexedDB transaction aborted"));
+                tx.onerror = () => reject(tx.error || new Error("IndexedDB transaction failed"));
+            });
+        }
+
+        let historyDbPromise = null;
+        function openHistoryDb() {
+            if (historyDbPromise) return historyDbPromise;
+            if (!isIndexedDbUsable()) {
+                historyDbPromise = Promise.reject(new Error("IndexedDB not available"));
+                return historyDbPromise;
+            }
+            historyDbPromise = new Promise((resolve, reject) => {
+                const req = indexedDB.open(HISTORY_IDB_DB_NAME, HISTORY_IDB_DB_VERSION);
+                req.onupgradeneeded = () => {
+                    const db = req.result;
+                    if (!db.objectStoreNames.contains(HISTORY_IDB_STORE_SESSION_HISTORIES)) {
+                        db.createObjectStore(HISTORY_IDB_STORE_SESSION_HISTORIES, { keyPath: "sessionId" });
+                    }
+                    if (!db.objectStoreNames.contains(HISTORY_IDB_STORE_META)) {
+                        db.createObjectStore(HISTORY_IDB_STORE_META, { keyPath: "key" });
+                    }
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error || new Error("Failed to open IndexedDB"));
+                req.onblocked = () => reject(new Error("IndexedDB open blocked (another tab?)"));
+            });
+            return historyDbPromise;
+        }
+
+        async function idbGetMeta(key) {
+            const db = await openHistoryDb();
+            const tx = db.transaction([HISTORY_IDB_STORE_META], "readonly");
+            const store = tx.objectStore(HISTORY_IDB_STORE_META);
+            const value = await idbRequestToPromise(store.get(String(key)));
+            await idbTxDone(tx);
+            return value?.value;
+        }
+
+        async function idbSetMeta(key, value) {
+            const db = await openHistoryDb();
+            const tx = db.transaction([HISTORY_IDB_STORE_META], "readwrite");
+            const store = tx.objectStore(HISTORY_IDB_STORE_META);
+            store.put({ key: String(key), value });
+            await idbTxDone(tx);
+        }
+
+        async function idbGetSessionHistory(sessionId) {
+            const db = await openHistoryDb();
+            const tx = db.transaction([HISTORY_IDB_STORE_SESSION_HISTORIES], "readonly");
+            const store = tx.objectStore(HISTORY_IDB_STORE_SESSION_HISTORIES);
+            const row = await idbRequestToPromise(store.get(String(sessionId)));
+            await idbTxDone(tx);
+            return normalizeHistoryPayload(row?.history);
+        }
+
+        async function idbPutSessionHistory(sessionId, panel, history) {
+            const db = await openHistoryDb();
+            const tx = db.transaction([HISTORY_IDB_STORE_SESSION_HISTORIES], "readwrite");
+            const store = tx.objectStore(HISTORY_IDB_STORE_SESSION_HISTORIES);
+            store.put({
+                sessionId: String(sessionId),
+                panel: String(panel || "chat"),
+                updatedAt: Date.now(),
+                history: normalizeHistoryPayload(history)
+            });
+            await idbTxDone(tx);
+        }
+
+        async function idbDeleteSessionHistory(sessionId) {
+            const db = await openHistoryDb();
+            const tx = db.transaction([HISTORY_IDB_STORE_SESSION_HISTORIES], "readwrite");
+            const store = tx.objectStore(HISTORY_IDB_STORE_SESSION_HISTORIES);
+            store.delete(String(sessionId));
+            await idbTxDone(tx);
+        }
+
         function loadPanelHistory(panel) {
             try {
-                const raw = localStorage.getItem(getPanelHistoryStorageKey(panel));
+                let raw = localStorage.getItem(getPanelHistoryStorageKey(panel));
+                // Legacy fallback: older versions stored chat history under a dedicated key.
+                if (!raw && panel === "chat") raw = localStorage.getItem(LEGACY_HISTORY_KEY);
                 return normalizeHistoryPayload(raw ? JSON.parse(raw) : []);
             } catch (e) {
                 return [];
@@ -2408,10 +2511,10 @@
             const legacyRaw = localStorage.getItem(LEGACY_HISTORY_KEY);
             if (!legacyRaw) return;
             const chatKey = getPanelHistoryStorageKey("chat");
-            if (!localStorage.getItem(chatKey)) {
-                localStorage.setItem(chatKey, legacyRaw);
+            // Avoid writing large values back to localStorage (may exceed quota). We'll migrate to IDB on bootstrap.
+            if (localStorage.getItem(chatKey)) {
+                localStorage.removeItem(LEGACY_HISTORY_KEY);
             }
-            localStorage.removeItem(LEGACY_HISTORY_KEY);
         }
 
         migrateLegacyHistoryStorage();
@@ -2863,7 +2966,8 @@
         }
 
         function normalizePanelSession(panel = "chat", session, index = 0) {
-            const history = normalizeHistoryPayload(session?.history);
+            const hasHistoryField = !!(session && typeof session === "object" && Object.prototype.hasOwnProperty.call(session, "history"));
+            const history = hasHistoryField ? normalizeHistoryPayload(session?.history) : [];
             const id = String(session?.id || "").trim() || createPanelSessionId(panel);
             const manualTitle = !!session?.manualTitle;
             let title = String(session?.title || "").trim();
@@ -2871,11 +2975,15 @@
                 const firstUser = history.find(item => item && item.role === "user");
                 title = firstUser ? derivePanelSessionTitleFromMessage(panel, firstUser) : createPanelSessionTitle(panel, index);
             }
+            const computedCount = history.filter(item => item && item.role !== "system").length;
+            const messageCount = Number.isFinite(session?.messageCount) ? session.messageCount : computedCount;
             return {
                 id,
                 title,
                 manualTitle,
                 history,
+                messageCount,
+                __historyLoaded: (typeof session?.__historyLoaded === "boolean") ? session.__historyLoaded : hasHistoryField,
                 settings: normalizePanelSessionSettings(panel, session?.settings || session?.preferences, session),
                 createdAt: Number.isFinite(session?.createdAt) ? session.createdAt : Date.now(),
                 updatedAt: Number.isFinite(session?.updatedAt) ? session.updatedAt : Date.now()
@@ -3083,21 +3191,129 @@
             return payload;
         }
 
+        function serializeSessionMetaForStorage() {
+            const payload = {};
+            PANEL_TYPES.forEach(panel => {
+                const state = getPanelSessionState(panel);
+                payload[panel] = {
+                    activeId: state.activeId,
+                    sessions: getPanelSessionList(panel).map(session => ({
+                        id: session.id,
+                        title: session.title,
+                        manualTitle: !!session.manualTitle,
+                        messageCount: Number.isFinite(session?.messageCount)
+                            ? session.messageCount
+                            : (Array.isArray(session?.history) ? session.history.filter(item => item && item.role !== "system").length : 0),
+                        settings: normalizePanelSessionSettings(panel, session?.settings, session),
+                        createdAt: session.createdAt,
+                        updatedAt: session.updatedAt
+                    }))
+                };
+            });
+            return payload;
+        }
+
+        function updateSessionMessageCount(session, options = {}) {
+            const { force = false } = options || {};
+            if (!session || typeof session !== "object") return 0;
+            if (!force && !session.__historyLoaded) {
+                return Number.isFinite(session.messageCount) ? session.messageCount : 0;
+            }
+            const history = Array.isArray(session.history) ? session.history : [];
+            const count = history.filter(item => item && item.role !== "system").length;
+            session.messageCount = count;
+            return count;
+        }
+
+        async function ensureSessionHistoryLoaded(panel = currentPanel, session = getActivePanelSession(panel)) {
+            if (!session || session.__historyLoaded) return session?.history || [];
+            try {
+                const history = await idbGetSessionHistory(session.id);
+                session.history = normalizeHistoryPayload(history);
+                session.__historyLoaded = true;
+                updateSessionMessageCount(session);
+                refreshActivePanelSessionTitleFromHistory(panel, session);
+                const state = getPanelSessionState(panel);
+                if (state?.activeId === session.id) {
+                    syncActivePanelHistoryAlias(panel);
+                }
+                return session.history;
+            } catch (err) {
+                // Keep as not-loaded so we don't accidentally overwrite persisted history with empty data.
+                return session.history || [];
+            }
+        }
+
+        async function persistSessionHistoryToIdb(panel = currentPanel, session = getActivePanelSession(panel)) {
+            if (!session) return;
+            try {
+                await idbPutSessionHistory(session.id, panel, serializeHistoryForStorage(normalizeHistoryPayload(session.history)));
+            } catch (err) {
+                // IDB might be blocked/unsupported (e.g. some file:// contexts). Keep UI functional.
+                // We intentionally do not throw here to avoid breaking the app flow.
+                showToast(`⚠️ 历史存储失败(IndexedDB): ${err.message}`, "warning");
+            }
+        }
+
+        async function bootstrapHistoryStorage() {
+            if (!isIndexedDbUsable()) return;
+            try {
+                const migrated = await idbGetMeta(HISTORY_IDB_META_KEY_MIGRATED);
+                if (!migrated) {
+                    for (const panel of PANEL_TYPES) {
+                        const sessions = getPanelSessionList(panel);
+                        for (const session of sessions) {
+                            if (!session) continue;
+                            // Only migrate if we actually have data in memory; otherwise we might overwrite IDB with empty arrays.
+                            if (session.__historyLoaded || (Array.isArray(session.history) && session.history.length > 0)) {
+                                await idbPutSessionHistory(session.id, panel, serializeHistoryForStorage(normalizeHistoryPayload(session.history)));
+                                session.__historyLoaded = true;
+                                updateSessionMessageCount(session);
+                            }
+                        }
+                    }
+                    await idbSetMeta(HISTORY_IDB_META_KEY_MIGRATED, true);
+                }
+
+                // Cleanup: these legacy keys can be very large and can trigger QuotaExceededError.
+                try { PANEL_TYPES.forEach(panel => localStorage.removeItem(getPanelHistoryStorageKey(panel))); } catch (e) {}
+                try { localStorage.removeItem(LEGACY_HISTORY_KEY); } catch (e) {}
+
+                // Rewrite session state in a compact form (metadata only).
+                try {
+                    const metaPayload = serializeSessionMetaForStorage();
+                    localStorage.setItem(PANEL_SESSION_STORAGE_KEY, JSON.stringify(metaPayload));
+                    PANEL_TYPES.forEach(item => localStorage.setItem(`${PANEL_SESSION_ACTIVE_PREFIX}${item}`, getPanelSessionState(item).activeId));
+                    localStorage.setItem(CHAT_THREAD_STORAGE_KEY, JSON.stringify(metaPayload.chat.sessions));
+                    localStorage.setItem(CHAT_THREAD_ACTIVE_KEY, metaPayload.chat.activeId);
+                } catch (e) {}
+            } catch (err) {
+                // IDB may be unavailable in some contexts. In that case we keep the old behavior (localStorage),
+                // but saving very large histories can still hit quota.
+            }
+        }
+
         function persistPanelSessions(panel = currentPanel) {
             const key = PANEL_TYPES.includes(panel) ? panel : "chat";
             const activeSession = getActivePanelSession(key);
             if (!activeSession) return;
+            updateSessionMessageCount(activeSession);
             try {
-                const payload = serializeSessionStateForStorage();
+                // Keep localStorage small: store only session metadata here.
+                const payload = serializeSessionMetaForStorage();
                 localStorage.setItem(PANEL_SESSION_STORAGE_KEY, JSON.stringify(payload));
                 PANEL_TYPES.forEach(item => localStorage.setItem(`${PANEL_SESSION_ACTIVE_PREFIX}${item}`, getPanelSessionState(item).activeId));
-                localStorage.setItem(getPanelHistoryStorageKey(key), JSON.stringify(serializeHistoryForStorage(activeSession.history)));
                 if (key === "chat") {
+                    // Back-compat: keep thread metadata mirrored for older loaders, but without history.
                     localStorage.setItem(CHAT_THREAD_STORAGE_KEY, JSON.stringify(payload.chat.sessions));
                     localStorage.setItem(CHAT_THREAD_ACTIVE_KEY, payload.chat.activeId);
                 }
             } catch (err) {
                 showToast(`⚠️ 会话保存失败: ${err.message}`, "warning");
+            }
+            // Persist the active session's full history to IndexedDB (async, non-blocking).
+            if (activeSession.__historyLoaded) {
+                void persistSessionHistoryToIdb(key, activeSession);
             }
         }
 
@@ -3128,6 +3344,8 @@
             const session = getActivePanelSession(key);
             if (session) {
                 session.history = normalizeHistoryPayload(history);
+                session.__historyLoaded = true;
+                updateSessionMessageCount(session, { force: true });
                 session.updatedAt = Date.now();
                 refreshActivePanelSessionTitleFromHistory(key, session);
                 panelHistories[key] = session.history;
@@ -4945,10 +5163,10 @@
             sendBtn.classList.remove("stop-btn");
         }
 
-        function switchPanel(panel){
+        async function switchPanel(panel){
             const target=['chat','image','voice','video'].includes(panel)?panel:'chat';
             currentPanel=target;
-            localStorage.setItem("agi_panel_v5",currentPanel);
+            try{ localStorage.setItem("agi_panel_v5",currentPanel); }catch(e){}
             document.querySelectorAll('.panel-tab').forEach(tab=>{
                 tab.classList.toggle('active',tab.dataset.panel===currentPanel);
             });
@@ -5001,6 +5219,7 @@
             syncPanelSessionScopedSelections(currentPanel);
             populateImageTemplateSelect(config.activeImagePromptTemplateId);
             applyPanelSendButton();
+            await ensureSessionHistoryLoaded(currentPanel, getActivePanelSession(currentPanel));
             render(currentPanel);
         }
 
@@ -8104,7 +8323,9 @@ ${packLines}`;
             const panel=currentPanel;
             const sessions=getPanelSessionList(panel);
             const activeSession=getActivePanelSession(panel);
-            const activeMessages=(activeSession?.history||[]).filter(item=>item.role!=="system").length;
+            const activeMessages = activeSession?.__historyLoaded
+                ? (activeSession?.history || []).filter(item => item.role !== "system").length
+                : (Number.isFinite(activeSession?.messageCount) ? activeSession.messageCount : 0);
             if(labelEl)labelEl.textContent=getPanelSessionLabel(panel);
             if(titleEl)titleEl.textContent=activeSession?.title || getPanelDefaultSessionTitle(panel);
             if(subtitleEl)subtitleEl.textContent=`${sessions.length} 个会话 · 当前 ${activeMessages} 条记录`;
@@ -8131,7 +8352,10 @@ ${packLines}`;
                 title.textContent=session.title || createPanelSessionTitle(panel, index);
                 const count=document.createElement("span");
                 count.className="chat-thread-pill-count";
-                count.textContent=String((session.history||[]).filter(item=>item.role!=="system").length);
+                const msgCount = session?.__historyLoaded
+                    ? (session.history || []).filter(item => item.role !== "system").length
+                    : (Number.isFinite(session?.messageCount) ? session.messageCount : 0);
+                count.textContent = String(msgCount);
                 const del=document.createElement("button");
                 del.type="button";
                 del.className="chat-thread-pill-delete";
@@ -8208,7 +8432,7 @@ ${packLines}`;
             return session;
         }
 
-        function switchChatThread(threadId){
+        async function switchChatThread(threadId){
             const targetId=String(threadId || "").trim();
             const panel=currentPanel;
             const state=getPanelSessionState(panel);
@@ -8223,6 +8447,8 @@ ${packLines}`;
             resetInputDraft();
             closeEmojiPicker();
             persistPanelSessions(panel);
+            await ensureSessionHistoryLoaded(panel, session);
+            renderChatThreadBar();
             render(panel);
             updateMeta(panel);
             applyPanelSendButton();
@@ -8247,7 +8473,7 @@ ${packLines}`;
             showToast("会话已重命名");
         }
 
-        function deleteChatThread(threadId){
+        async function deleteChatThread(threadId){
             const panel=currentPanel;
             const state=getPanelSessionState(panel);
             const sessions=getPanelSessionList(panel);
@@ -8262,6 +8488,8 @@ ${packLines}`;
             const deletingActive=session.id===state.activeId;
             if(sessions.length===1){
                 session.history=[];
+                session.__historyLoaded=true;
+                updateSessionMessageCount(session,{force:true});
                 session.manualTitle=false;
                 session.updatedAt=Date.now();
                 refreshActivePanelSessionTitleFromHistory(panel, session);
@@ -8270,6 +8498,7 @@ ${packLines}`;
             }else{
                 const idx=sessions.findIndex(item=>item.id===session.id);
                 sessions.splice(idx,1);
+                void idbDeleteSessionHistory(session.id).catch(()=>{});
                 if(deletingActive){
                     state.activeId=sessions[Math.max(0, idx-1)]?.id || sessions[0].id;
                     syncActivePanelHistoryAlias(panel);
@@ -8284,6 +8513,7 @@ ${packLines}`;
                 renderAttachments();
                 resetInputDraft();
                 closeEmojiPicker();
+                await ensureSessionHistoryLoaded(panel, getActivePanelSession(panel));
                 render(panel);
                 updateMeta(panel);
                 applyPanelSendButton();
@@ -9043,9 +9273,17 @@ ${packLines}`;
             showToast("Chat exported");
         }
 
-        function exportAllDataBackup(){
+        async function exportAllDataBackup(){
             try{
                 ensureSystemPromptState();
+
+                // Ensure backup contains complete histories (even if not currently loaded in memory).
+                for (const panel of PANEL_TYPES) {
+                    for (const session of getPanelSessionList(panel)) {
+                        await ensureSessionHistoryLoaded(panel, session);
+                    }
+                }
+
                 PANEL_TYPES.forEach(panel=>saveChatHistory(panel));
                 const dynamicKeys=[];
                 for(let i=0;i<localStorage.length;i++){
@@ -10107,14 +10345,8 @@ ${packLines}`;
         populateImageTemplateSelect(config.activeImagePromptTemplateId);
         populateRelaySelect();
         populateModelSelect();
-        switchPanel(currentPanel);
-        render();
+        void bootstrapHistoryStorage();
+        void switchPanel(currentPanel);
     </script>
 </body>
 </html>
-
-
-
-
-
-

@@ -19,3 +19,4 @@ Then open `http://localhost:8000`.
 
 - API keys are **not** shipped in this repo. Configure them in the in-app Settings panel.
 - A backup file like `index.html.bak_*` is ignored by git via `.gitignore` by default.
+- Chat/session histories are persisted in **IndexedDB** to avoid `localStorage` quota issues (so running via `http://localhost:...` is recommended; some browsers can restrict IndexedDB on `file:///` pages).
