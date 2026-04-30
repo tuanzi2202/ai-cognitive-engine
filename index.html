@@ -1882,7 +1882,7 @@
                             </div>
                             <div class="settings-card-body">
                                 <div class="settings-group"><label>Temperature</label><div class="range-row"><input type="range" id="set-temperature" min="0" max="2" step="0.1" value="0.7" oninput="document.getElementById('temp-val').innerText=this.value"><span class="range-val" id="temp-val">0.7</span></div></div>
-                                <div class="settings-group"><label>上下文轮数</label><div class="range-row"><input type="range" id="set-context" min="2" max="30" step="2" value="10" oninput="document.getElementById('ctx-val').innerText=this.value"><span class="range-val" id="ctx-val">10</span></div></div>
+                                <div class="settings-group"><label>上下文轮数</label><div class="range-row"><input type="number" id="set-context" min="0" step="2" value="0" oninput="document.getElementById('ctx-val').innerText=this.value==0?'不限制':this.value" style="width:80px"><span class="range-val" id="ctx-val">不限制</span></div></div>
                                 <div class="settings-group">
                                     <label>系统提示词方案</label>
                                     <div class="relay-manage-row">
@@ -3372,7 +3372,7 @@
             systemPrompts: JSON.parse(JSON.stringify(DEFAULT_SYSTEM_PROMPT_PROFILES)),
             activeSystemPromptId: "sp-default",
             temperature: 0.7,
-            contextSize: 10,
+            contextSize: 0,
             imgQuality: 0.8,
             imgMaxSize: 2048,
             projFileMax: 128,
@@ -4590,7 +4590,7 @@
             normalizeChatAppearanceSettings();
             normalizeBackgroundSettings();
             if (typeof config.temperature !== "number") config.temperature = 0.7;
-            if (typeof config.contextSize !== "number") config.contextSize = 10;
+            if (typeof config.contextSize !== "number") config.contextSize = 0;
             if (typeof config.imgQuality !== "number") config.imgQuality = 0.8;
             if (typeof config.imgMaxSize !== "number") config.imgMaxSize = 2048;
             if (typeof config.projFileMax !== "number") config.projFileMax = 128;
@@ -8762,7 +8762,7 @@ ${packLines}`;
                 if(systemPrompt.trim()){
                     messages.push({role:"system",content:systemPrompt});
                 }
-                history.filter(m=>m.role!=='system').slice(-(config.contextSize)).forEach(m=>{
+                history.filter(m=>m.role!=='system').slice(config.contextSize>0?-(config.contextSize):0).forEach(m=>{
                     if(m.role==='user'||m.role==='assistant')
                         messages.push({role:m.role,content:m.role==='user'?buildApiContent(m):(m.content||"")});
                 });
@@ -9984,7 +9984,7 @@ ${packLines}`;
             document.getElementById("set-temperature").value=config.temperature;
             document.getElementById("temp-val").innerText=config.temperature;
             document.getElementById("set-context").value=config.contextSize;
-            document.getElementById("ctx-val").innerText=config.contextSize;
+            document.getElementById("ctx-val").innerText=config.contextSize===0?'不限制':config.contextSize;
             document.getElementById("set-img-quality").value=config.imgQuality||0.8;
             document.getElementById("imgq-val").innerText=config.imgQuality||0.8;
             document.getElementById("set-img-maxsize").value=config.imgMaxSize||2048;
@@ -10149,7 +10149,7 @@ ${packLines}`;
                 systemPrompts:JSON.parse(JSON.stringify(DEFAULT_SYSTEM_PROMPT_PROFILES)),
                 activeSystemPromptId:"sp-default",
                 temperature:0.7,
-                contextSize:10,
+                contextSize:0,
                 imgQuality:0.8,
                 imgMaxSize:2048,
                 projFileMax:128,
