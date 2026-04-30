@@ -2165,6 +2165,7 @@
 3. 不确定时明确说明假设，不编造事实。
 4. 代码相关问题优先给出可直接运行的方案，并提示边界条件。`;
         const DEFAULT_SYSTEM_PROMPT_PROFILES = [
+            { id: "_empty", name: "无提示词", prompt: "", useEmojiPacks: false, _locked: true },
             { id: "sp-default", name: "默认助手", prompt: DEFAULT_SYSTEM_PROMPT, useEmojiPacks: false }
         ];
 
@@ -3385,7 +3386,7 @@
             voiceApiKey: DEFAULT_VOICE_API_KEY,
             systemPrompt: DEFAULT_SYSTEM_PROMPT,
             systemPrompts: JSON.parse(JSON.stringify(DEFAULT_SYSTEM_PROMPT_PROFILES)),
-            activeSystemPromptId: "sp-default",
+            activeSystemPromptId: "_empty",
             temperature: 0.7,
             contextSize: 0,
             imgQuality: 0.8,
@@ -4001,6 +4002,18 @@
             });
             if (profiles.length === 0) {
                 profiles = JSON.parse(JSON.stringify(DEFAULT_SYSTEM_PROMPT_PROFILES));
+            }
+            // 确保 _empty（无提示词）始终存在且排在首位，不可被删除
+            const emptyIdx = profiles.findIndex(item => item.id === "_empty");
+            if (emptyIdx >= 0) {
+                const [emptyProfile] = profiles.splice(emptyIdx, 1);
+                emptyProfile.name = "无提示词";
+                emptyProfile.prompt = "";
+                emptyProfile.useEmojiPacks = false;
+                emptyProfile._locked = true;
+                profiles.unshift(emptyProfile);
+            } else {
+                profiles.unshift({ id: "_empty", name: "无提示词", prompt: "", useEmojiPacks: false, _locked: true });
             }
             return profiles;
         }
@@ -8419,6 +8432,7 @@ ${packLines}`;
             const state=getPanelSessionState(panel);
             const sessions=getPanelSessionList(panel);
             const inheritedSettings = clonePanelSessionSettings(panel, getActivePanelSession(panel));
+            if(panel==="chat")inheritedSettings.systemPromptId="_empty";
             const session=normalizePanelSession(panel,{
                 id:createPanelSessionId(panel),
                 title:title || createPanelSessionTitle(panel,sessions.length),
@@ -9293,6 +9307,8 @@ ${packLines}`;
         function parseMarkdownToMessages(md){
             const messages=[];
             if(!md||typeof md!=="string")return messages;
+            // 统一换行符
+            md=md.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
             // 找到第一条消息的起始位置
             const firstMatch=md.match(/\n## (?:User|Assistant) \(/);
             if(!firstMatch)return messages;
@@ -9345,17 +9361,37 @@ ${packLines}`;
             if(messages.length===0){showToast("未在文件中找到有效的对话记录","error");return;}
             const userCount=messages.filter(m=>m.role==="user").length;
             if(!confirm("将从文件中导入 "+messages.length+" 条消息（约 "+userCount+" 轮对话）作为新会话。\n\n点击\"确定\"继续，点击\"取消\"放弃。"))return;
+
             const panel=currentPanel;
+
+            // 让用户选择系统提示词方案
+            let chosenPromptId="_empty";
+            if(panel==="chat"){
+                ensureSystemPromptState();
+                const profiles=config.systemPrompts||[];
+                let menu="请为导入的会话选择系统提示词方案：\n\n";
+                menu+="  0. 不设置（无提示词）\n";
+                profiles.forEach((p,i)=>{menu+="  "+(i+1)+". "+p.name+"\n";});
+                menu+="\n输入序号选择，默认 0（无提示词）。";
+                const input=prompt(menu,"0");
+                if(input!==null){
+                    const idx=parseInt(input);
+                    if(idx>0&&idx<=profiles.length)chosenPromptId=profiles[idx-1].id;
+                    else chosenPromptId="_empty";
+                }
+            }
+
             const sessionId=createPanelSessionId(panel);
-            const firstUser=messages.find(m=>m.role==="user");
-            const title=firstUser?derivePanelSessionTitleFromMessage(panel,firstUser):getPanelDefaultSessionTitle(panel);
+            const baseName=(file.name||"import").replace(/\.[^.]+$/,"").trim();
+            const title=baseName||(messages.find(m=>m.role==="user")?derivePanelSessionTitleFromMessage(panel,messages.find(m=>m.role==="user")):getPanelDefaultSessionTitle(panel));
             const newSession=normalizePanelSession(panel,{
                 id:sessionId,
                 title:title,
                 history:messages,
                 manualTitle:false,
                 createdAt:Date.now(),
-                updatedAt:Date.now()
+                updatedAt:Date.now(),
+                settings:{systemPromptId:chosenPromptId}
             });
             const state=getPanelSessionState(panel);
             state.sessions.push(newSession);
@@ -9582,6 +9618,7 @@ ${packLines}`;
             const targetId=(profileId || select?.value || config.activeSystemPromptId || "").trim();
             const profile=config.systemPrompts.find(item=>item.id===targetId);
             if(!profile)return;
+            if(profile._locked===true)return; // 无提示词不可修改
             const idx=config.systemPrompts.findIndex(item=>item.id===targetId);
             profile.name=(nameInput?.value || "").trim() || `方案${idx + 1}`;
             profile.prompt=String(promptInput?.value ?? "");
@@ -9604,10 +9641,12 @@ ${packLines}`;
             const nameInput=document.getElementById("set-system-profile-name");
             const promptInput=document.getElementById("set-system-prompt");
             const useEmojiInput=document.getElementById("set-system-use-emoji-packs");
-            if(nameInput)nameInput.value=profile.name || "";
-            if(promptInput)promptInput.value=typeof profile.prompt==="string" ? profile.prompt : "";
-            if(useEmojiInput)useEmojiInput.checked=profile.useEmojiPacks === true;
+            const isLocked=profile._locked===true;
+            if(nameInput){nameInput.value=profile.name||"";nameInput.disabled=isLocked;nameInput.style.opacity=isLocked?"0.6":"";}
+            if(promptInput){promptInput.value=typeof profile.prompt==="string"?profile.prompt:"";promptInput.disabled=isLocked;promptInput.style.opacity=isLocked?"0.6":"";}
+            if(useEmojiInput){useEmojiInput.checked=profile.useEmojiPacks===true;useEmojiInput.disabled=isLocked;}
             syncEmojiPickerAvailability();
+            if(isLocked)showToast("“无提示词”为系统保留方案，不可修改内容");
         }
 
         function switchSystemPromptProfile(profileId){
@@ -9635,11 +9674,12 @@ ${packLines}`;
 
         function removeSystemPromptProfile(){
             ensureSystemPromptState();
-            if(config.systemPrompts.length<=1){
-                showToast("至少保留 1 套系统提示词方案","warning");
+            if(config.systemPrompts.length<=2){
+                showToast("至少保留 1 套可编辑方案","warning");
                 return;
             }
             const currentId=(document.getElementById("set-system-profile-select")?.value || config.activeSystemPromptId || "").trim();
+            if(currentId==="_empty"){showToast("“无提示词”为系统保留方案，不可删除","warning");return;}
             config.systemPrompts=config.systemPrompts.filter(item=>item.id!==currentId);
             const nextProfile=config.systemPrompts[0];
             fillSystemPromptProfileInputs(nextProfile?.id);
