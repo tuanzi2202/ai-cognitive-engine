@@ -1521,7 +1521,7 @@
                 <button class="icon-btn" id="image-template-manage-btn" onclick="openImageTemplateManager()" title="管理绘图模板" style="display:none;">🧩</button>
                 <div class="system-prompt-select-wrapper"><select id="system-prompt-select" title="系统提示词方案"></select></div>
                 <button class="icon-btn" onclick="toggleTheme()" title="切换主题" id="theme-btn">🌙</button>
-                <button class="icon-btn" onclick="openSettings()" title="设置">⚙️</button><button class="icon-btn" onclick="exportChat()" title="导出对话">📥</button><button class="icon-btn" onclick="exportAllDataBackup()" title="全量备份">🗂️</button>
+                <button class="icon-btn" onclick="openSettings()" title="设置">⚙️</button><button class="icon-btn" onclick="exportChat()" title="导出对话">📥</button><button class="icon-btn" onclick="document.getElementById('chat-md-import-input').click()" title="导入对话">📤</button>
                 <button class="icon-btn danger" onclick="clearHistory()" title="清空记录">🗑️</button>
             </div>
         </div>
@@ -1663,6 +1663,8 @@
                 </div>
                 <input type="file" id="file-input" multiple accept="image/*,.txt,.md,.csv,.json,.py,.js,.ts,.html,.css,.java,.c,.cpp,.go,.rs,.sh,.yaml,.yml,.xml,.sql,.log" style="display:none">
                 <input type="file" id="dir-input" webkitdirectory directory multiple style="display:none">
+                <input type="file" id="backup-restore-input" accept=".json" style="display:none" onchange="restoreAllDataBackup(this.files[0])">
+                <input type="file" id="chat-md-import-input" accept=".md,.txt,.markdown" style="display:none" onchange="importChatFromMarkdown(this.files[0])">
             </div>
         </div>
     </div>
@@ -1872,6 +1874,19 @@
                 </div>
                 <div class="settings-tab-content" id="tab-advanced">
                     <div class="settings-layout">
+                        <section class="settings-card settings-col-12" style="margin-bottom:12px;">
+                            <div class="settings-card-header">
+                                <div class="settings-card-icon">💾</div>
+                                <div>
+                                    <div class="settings-card-title">配置备份与还原</div>
+                                    <div class="settings-card-desc">导出/导入引擎设置（不含会话记录）</div>
+                                </div>
+                                <div style="margin-left:auto;display:flex;gap:8px;">
+                                    <button class="icon-btn" onclick="exportAllDataBackup()" title="导出配置备份">🗂️ 导出</button>
+                                    <button class="icon-btn" onclick="document.getElementById('backup-restore-input').click()" title="导入配置备份">📂 导入</button>
+                                </div>
+                            </div>
+                        </section>
                         <section class="settings-card settings-col-6">
                             <div class="settings-card-header">
                                 <div class="settings-card-icon">🧠</div>
@@ -3559,7 +3574,8 @@
                 return allowEmpty ? [] : normalizeSelectedModels(fallback, DEFAULT_SELECTED_MODELS, false);
             }
             const source = (Array.isArray(records) && records.length > 0) ? records : fallback;
-            const list = source.map(normalizeModelRecord).filter(Boolean);
+            const list = source.map(normalizeModelRecord).filter(Boolean)
+                .filter(item=>item.id!=="[REDACTED]"&&item.name!=="[REDACTED]");
             if (list.length > 0) return list;
             if (allowEmpty && Array.isArray(records)) return [];
             return JSON.parse(JSON.stringify(DEFAULT_SELECTED_MODELS)).map(normalizeModelRecord).filter(Boolean);
@@ -3573,7 +3589,7 @@
                     if (item && typeof item === "object") return String(item.id || item.name || "").trim();
                     return "";
                 }).filter(Boolean)
-            )).sort();
+            )).filter(id=>id!=="[REDACTED]").sort();
         }
 
         function ensureChatRelayModelState(relay) {
@@ -9273,88 +9289,226 @@ ${packLines}`;
             showToast("Chat exported");
         }
 
+        // ── Markdown 对话解析 ──
+        function parseMarkdownToMessages(md){
+            const messages=[];
+            if(!md||typeof md!=="string")return messages;
+            // 找到第一条消息的起始位置
+            const firstMatch=md.match(/\n## (?:User|Assistant) \(/);
+            if(!firstMatch)return messages;
+            const body=md.substring(firstMatch.index+1);
+            // 按 User/Assistant 消息头分割
+            const blocks=body.split(/\n(?=## (?:User|Assistant) \()/);
+            for(const block of blocks){
+                const headerMatch=block.match(/^## (User|Assistant) \(([^)]*)\)(?: (\d+\.?\d*)s)?\n/);
+                if(!headerMatch)continue;
+                const role=headerMatch[1]==="User"?"user":"assistant";
+                const timeStr=headerMatch[2];
+                const elapsedStr=headerMatch[3];
+                let content=block.substring(headerMatch[0].length).trim();
+                let timestamp;
+                if(timeStr){
+                    const parsed=new Date(timeStr);
+                    if(!isNaN(parsed.getTime()))timestamp=parsed.getTime();
+                }
+                let reasoning="";
+                let elapsed;
+                if(role==="assistant"){
+                    if(elapsedStr)elapsed=Math.round(parseFloat(elapsedStr)*1000);
+                    // 提取 <details><summary>Reasoning</summary> 中的思考内容
+                    const detailsMatch=content.match(/^<details><summary>Reasoning<\/summary>\n\n([\s\S]*?)\n\n<\/details>\n\n/);
+                    if(detailsMatch){
+                        reasoning=detailsMatch[1].trim();
+                        content=content.substring(detailsMatch[0].length).trim();
+                    }
+                }
+                // 移除尾部 --- 分隔符
+                content=content.replace(/\n+---\s*$/,"").trim();
+                if(!content&&!reasoning)continue;
+                const msg={role,content};
+                if(timestamp)msg.timestamp=timestamp;
+                if(reasoning)msg.reasoning=reasoning;
+                if(elapsed)msg.elapsed=elapsed;
+                messages.push(msg);
+            }
+            return messages;
+        }
+
+        // ── Markdown 对话导入 ──
+        async function importChatFromMarkdown(file){
+            if(!file)return;
+            const inputEl=document.getElementById("chat-md-import-input");
+            if(inputEl)inputEl.value="";
+            let md;
+            try{md=await file.text();}catch(e){showToast("文件读取失败","error");return;}
+            const messages=parseMarkdownToMessages(md);
+            if(messages.length===0){showToast("未在文件中找到有效的对话记录","error");return;}
+            const userCount=messages.filter(m=>m.role==="user").length;
+            if(!confirm("将从文件中导入 "+messages.length+" 条消息（约 "+userCount+" 轮对话）作为新会话。\n\n点击\"确定\"继续，点击\"取消\"放弃。"))return;
+            const panel=currentPanel;
+            const sessionId=createPanelSessionId(panel);
+            const firstUser=messages.find(m=>m.role==="user");
+            const title=firstUser?derivePanelSessionTitleFromMessage(panel,firstUser):getPanelDefaultSessionTitle(panel);
+            const newSession=normalizePanelSession(panel,{
+                id:sessionId,
+                title:title,
+                history:messages,
+                manualTitle:false,
+                createdAt:Date.now(),
+                updatedAt:Date.now()
+            });
+            const state=getPanelSessionState(panel);
+            state.sessions.push(newSession);
+            newSession.__historyLoaded=true;
+            updateSessionMessageCount(newSession);
+            persistPanelSessions(panel);
+            renderChatThreadBar();
+            switchChatThread(sessionId);
+            showToast("已导入 "+messages.length+" 条消息，新会话 “"+title+"”");
+        }
+
+        // ── 配置备份导出（不含会话记录） ──
         async function exportAllDataBackup(){
             try{
                 ensureSystemPromptState();
-
-                // Ensure backup contains complete histories (even if not currently loaded in memory).
-                for (const panel of PANEL_TYPES) {
-                    for (const session of getPanelSessionList(panel)) {
-                        await ensureSessionHistoryLoaded(panel, session);
-                    }
-                }
-
-                PANEL_TYPES.forEach(panel=>saveChatHistory(panel));
-                const dynamicKeys=[];
-                for(let i=0;i<localStorage.length;i++){
-                    const key=localStorage.key(i);
-                    if(key && /^agi_/i.test(key))dynamicKeys.push(key);
-                }
-                const storageKeys=Array.from(new Set([
-                    ...dynamicKeys,
-                    "agi_config_v5","agi_count_v5","agi_panel_v5","agi_theme_v5","agi_chat_v5",
-                    PANEL_SESSION_STORAGE_KEY, CHAT_THREAD_STORAGE_KEY, CHAT_THREAD_ACTIVE_KEY, EMOJI_RECENT_KEY, CUSTOM_EMOJI_PACKS_KEY,
-                    ...PANEL_TYPES.map(panel=>`${PANEL_SESSION_ACTIVE_PREFIX}${panel}`),
-                    ...PANEL_TYPES.map(panel=>getPanelHistoryStorageKey(panel))
-                ]));
+                // 仅导出配置相关的 localStorage 键
+                const configKeys=["agi_config_v5","agi_theme_v5",CUSTOM_EMOJI_PACKS_KEY,EMOJI_RECENT_KEY];
                 const storageSnapshot={};
-                storageKeys.forEach(key=>{
-                    const value=localStorage.getItem(key);
-                    if(value!==null)storageSnapshot[key]=value;
+                configKeys.forEach(key=>{
+                    try{const value=localStorage.getItem(key);if(value!==null)storageSnapshot[key]=value;}catch(e){}
                 });
-
-                // Security: backups can easily leak API keys when shared. Default to redacting keys.
-                const redactKeys = confirm("全量备份可能包含 API Key 等敏感信息。建议脱敏后导出。\n\n点击“确定”脱敏，点击“取消”原样导出。");
-                const redactSensitiveString = (v) => {
-                    if (typeof v !== "string") return v;
-                    return v
-                        .replace(/[A-Za-z][A-Za-z0-9_-]{1,12}-[A-Za-z0-9_-]{10,}/g, "[REDACTED]")
-                        .replace(/(\"[A-Za-z]*apikey\"\s*:\s*\")[^\"]*(\")/gi, '$1[REDACTED]$2');
-                };
-                const redactValue = (v) => (typeof v === "string" && v.trim()) ? "[REDACTED]" : "";
-                let safeConfig = JSON.parse(JSON.stringify(config));
-                let safeStorageSnapshot = storageSnapshot;
-                if (redactKeys) {
-                    safeConfig.apiKey = redactValue(safeConfig.apiKey);
-                    safeConfig.imageApiKey = redactValue(safeConfig.imageApiKey);
-                    safeConfig.voiceApiKey = redactValue(safeConfig.voiceApiKey);
-                    const redactRelays = (arr) => Array.isArray(arr) ? arr.map(r => ({ ...r, apiKey: redactValue(r?.apiKey) })) : arr;
-                    safeConfig.chatRelays = redactRelays(safeConfig.chatRelays);
-                    safeConfig.imageRelays = redactRelays(safeConfig.imageRelays);
-                    safeConfig.voiceRelays = redactRelays(safeConfig.voiceRelays);
-                    safeStorageSnapshot = {};
-                    Object.keys(storageSnapshot).forEach(k => { safeStorageSnapshot[k] = redactSensitiveString(storageSnapshot[k]); });
+                // API Key 脱敏
+                const redactKeys=confirm("配置备份可能包含 API Key 等敏感信息。建议脱敏后导出。\n\n点击“确定”脱敏，点击“取消”原样导出。");
+                const redactValue=(v)=>(typeof v==="string"&&v.trim())?"[REDACTED]":"";
+                let safeConfig=JSON.parse(JSON.stringify(config));
+                if(redactKeys){
+                    safeConfig.apiKey=redactValue(safeConfig.apiKey);
+                    safeConfig.imageApiKey=redactValue(safeConfig.imageApiKey);
+                    safeConfig.voiceApiKey=redactValue(safeConfig.voiceApiKey);
+                    const redactRelays=(arr)=>Array.isArray(arr)?arr.map(r=>({...r,apiKey:redactValue(r?.apiKey)})):arr;
+                    safeConfig.chatRelays=redactRelays(safeConfig.chatRelays);
+                    safeConfig.imageRelays=redactRelays(safeConfig.imageRelays);
+                    safeConfig.voiceRelays=redactRelays(safeConfig.voiceRelays);
                 }
                 const payload={
                     app:"AI Cognitive Engine",
                     backupVersion:"v5.3",
                     exportedAt:new Date().toISOString(),
                     exportedAtLocal:new Date().toLocaleString('zh-CN'),
-                    runtime:{
-                        apiUsage,
-                        currentPanel,
-                        theme:localStorage.getItem("agi_theme_v5") || "light"
-                    },
                     config:safeConfig,
-                    histories:JSON.parse(JSON.stringify(panelHistories)),
-                    panelSessions:serializeSessionStateForStorage(),
-                    chatThreads:JSON.parse(JSON.stringify(chatThreadState.threads)),
-                    activeChatThreadId:chatThreadState.activeId,
                     customEmojiPacks:JSON.parse(JSON.stringify(customEmojiLibrary)),
-                    localStorage:safeStorageSnapshot
+                    localStorage:storageSnapshot
                 };
                 const json=JSON.stringify(payload,null,2);
                 const blob=new Blob([json],{type:"application/json;charset=utf-8"});
                 const stamp=new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[\/:\s]/g,'-');
                 const a=document.createElement("a");
                 a.href=URL.createObjectURL(blob);
-                a.download=`AI_Full_Backup_${stamp}.json`;
+                a.download=`AI_Config_Backup_${stamp}.json`;
                 a.click();
                 URL.revokeObjectURL(a.href);
-                showToast("全量备份已导出");
+                showToast("配置备份已导出（不含会话记录）");
             }catch(err){
-                showToast(`备份导出失败: ${err.message}`,"error");
+                showToast(`配置备份导出失败: ${err.message}`,"error");
             }
+        }
+
+        // ── 备份导入还原（读档） ──
+        async function restoreAllDataBackup(file){
+            if(!file)return;
+            // 重置 input 以允许重复选择同一文件
+            const inputEl=document.getElementById("backup-restore-input");
+            if(inputEl)inputEl.value="";
+
+            // 1. 读取并解析
+            let backup;
+            try{
+                const text=await file.text();
+                backup=JSON.parse(text);
+            }catch(e){
+                showToast("文件无效：不是合法的 JSON 格式","error");
+                return;
+            }
+
+            // 2. 结构校验
+            if(!backup||typeof backup!=="object"){showToast("无效的备份文件","error");return;}
+            if(backup.app!=="AI Cognitive Engine"){showToast("该文件不是 AI Cognitive Engine 的备份","error");return;}
+            if(!backup.backupVersion||!String(backup.backupVersion).startsWith("v5")){
+                const accepted=confirm("备份版本不匹配 ("+(backup.backupVersion||"未知")+")。\n当前应用期望 v5.x 版本。\n\n点击\"确定\"尝试强制还原，点击\"取消\"放弃。");
+                if(!accepted)return;
+            }
+            if(!backup.localStorage||typeof backup.localStorage!=="object"){showToast("备份文件缺少 localStorage 数据","error");return;}
+
+            // 3. 扫描脱敏的 API Key
+            let redactedKeys=[];
+            if(backup.config){
+                [{key:"apiKey",label:"Chat API Key"},{key:"imageApiKey",label:"绘图 API Key"},{key:"voiceApiKey",label:"语音 API Key"}].forEach(({key,label})=>{
+                    if(typeof backup.config[key]==="string"&&backup.config[key].trim()==="[REDACTED]")redactedKeys.push(label);
+                });
+                ["chatRelays","imageRelays","voiceRelays"].forEach(field=>{
+                    const relays=backup.config[field];
+                    if(Array.isArray(relays))relays.forEach(relay=>{
+                        if(relay&&typeof relay.apiKey==="string"&&relay.apiKey.trim()==="[REDACTED]")redactedKeys.push(relay.name||relay.id||field);
+                    });
+                });
+            }
+
+            // 4. 确认
+            let warnMsg="将用备份覆盖当前配置数据。此操作不可撤消。\n\n点击\"确定\"继续，点击\"取消\"放弃。";
+            if(redactedKeys.length>0)warnMsg+="\n\n⚠️ 备份中以下 API Key 已脱敏，还原后需重新填写：\n"+redactedKeys.map(k=>"  • "+k).join("\n");
+            if(!confirm(warnMsg))return;
+
+            // 5. 清空现有 localStorage agi_* 键
+            try{
+                const keysToRemove=[];
+                for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key&&/^agi_/i.test(key))keysToRemove.push(key);}
+                keysToRemove.forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
+            }catch(e){}
+
+            // 6. 写入备份 localStorage 快照
+            let lsFailures=0;
+            Object.entries(backup.localStorage).forEach(([key,value])=>{
+                try{localStorage.setItem(key,String(value));}catch(e){lsFailures++;}
+            });
+            if(lsFailures>0)showToast("部分设置项写入失败 ("+lsFailures+")，但核心数据已还原","warning");
+
+            // 7. 还原会话历史到 IndexedDB
+            if(isIndexedDbUsable()){
+                try{
+                    const db=await openHistoryDb();
+                    // 清空现有历史
+                    {
+                        const clearTx=db.transaction([HISTORY_IDB_STORE_SESSION_HISTORIES],"readwrite");
+                        const clearStore=clearTx.objectStore(HISTORY_IDB_STORE_SESSION_HISTORIES);
+                        clearStore.clear();
+                        await idbTxDone(clearTx);
+                    }
+                    // 写入各面板的会话历史
+                    const panelData=backup.panelSessions||{};
+                    for(const panel of PANEL_TYPES){
+                        const pd=panelData[panel];
+                        if(!pd||!Array.isArray(pd.sessions))continue;
+                        for(const session of pd.sessions){
+                            if(!session||!session.id)continue;
+                            const history=normalizeHistoryPayload(Array.isArray(session.history)?session.history:[]);
+                            try{
+                                const tx=db.transaction([HISTORY_IDB_STORE_SESSION_HISTORIES],"readwrite");
+                                const store=tx.objectStore(HISTORY_IDB_STORE_SESSION_HISTORIES);
+                                store.put({sessionId:String(session.id),panel:String(panel),updatedAt:session.updatedAt||Date.now(),history:history});
+                                await idbTxDone(tx);
+                            }catch(e){/* 单会话写入失败不致命 */}
+                        }
+                    }
+                }catch(err){
+                    showToast("历史记录还原至 IndexedDB 失败: "+err.message,"warning");
+                }
+            }else{
+                showToast("IndexedDB 不可用，历史记录未还原（设置和会话列表已成功还原）","warning");
+            }
+
+            // 8. 重载
+            showToast("备份还原完成，即将重载页面...");
+            setTimeout(()=>{location.reload();},600);
         }
 
         // ══════════════════════════════════════════鈺?
