@@ -15,6 +15,21 @@ python -m http.server 8000
 
 Then open `http://localhost:8000`.
 
+## DashScope/Qwen TTS CORS proxy
+
+Alibaba DashScope does not allow direct browser calls from this static app. For Qwen TTS, start the local proxy:
+
+```powershell
+cd C:\Users\Lenovo\Desktop\AI
+.\start-dashscope-proxy.ps1
+```
+
+Then set the voice API URL in Settings to:
+
+```text
+http://127.0.0.1:8787/compatible-mode/v1
+```
+
 ## Notes
 
 - API keys are **not** shipped in this repo. Configure them in the in-app Settings panel.

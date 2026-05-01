@@ -497,7 +497,8 @@
         .panel-param-group label { font-weight: 600; color: var(--text-muted); }
         .panel-param-group.wide { flex: 1 1 280px; }
         .panel-param-group input,
-        .panel-param-group select {
+        .panel-param-group select,
+        .panel-param-group textarea {
             height: 24px;
             min-width: 76px;
             max-width: 150px;
@@ -509,7 +510,15 @@
             font: inherit;
             outline: none;
         }
-        .panel-param-group.wide input { max-width: none; width: 100%; }
+        .panel-param-group textarea {
+            height: 46px;
+            min-height: 46px;
+            resize: vertical;
+            line-height: 1.35;
+            padding: 5px 8px;
+        }
+        .panel-param-group.wide input,
+        .panel-param-group.wide textarea { max-width: none; width: 100%; }
         .panel-param-group .range-value { min-width: 34px; text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; }
         .panel-param-group input:focus,
         .panel-param-group select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37,99,235,0.12); }
@@ -1598,6 +1607,36 @@
                             <select id="quick-tts-voice"></select>
                         </div>
                         <div class="panel-param-group">
+                            <label for="quick-tts-custom-voice">自定义音色</label>
+                            <input type="text" id="quick-tts-custom-voice" placeholder="voice_... 可选">
+                            <button type="button" class="btn-secondary" id="quick-tts-design-voice" onclick="handleQwenVoiceDesign()" style="display:none;font-size:12px;padding:4px 10px;border-radius:6px;">一键设计</button>
+                            <button type="button" class="btn-secondary" id="quick-tts-clone-voice" onclick="handleQwenVoiceClone()" style="display:none;font-size:12px;padding:4px 10px;border-radius:6px;">一键克隆</button>
+                            <button type="button" class="btn-secondary" id="quick-tts-save-voice" onclick="saveCurrentTtsVoiceToLibrary()" style="font-size:12px;padding:4px 10px;border-radius:6px;">保存</button>
+                        </div>
+                        <div class="panel-param-group" id="tts-voice-clone-file-group" style="display:none;">
+                            <label for="quick-tts-clone-file">参考音频</label>
+                            <input type="file" id="quick-tts-clone-file" accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4,audio/m4a,.mp3,.wav,.m4a">
+                        </div>
+                        <div class="panel-param-group" id="tts-voice-library-group">
+                            <label for="quick-tts-voice-library">音色库</label>
+                            <select id="quick-tts-voice-library"></select>
+                            <button type="button" class="btn-secondary" onclick="deleteSavedTtsVoice()" style="font-size:12px;padding:4px 10px;border-radius:6px;">删除</button>
+                            <button type="button" class="btn-secondary" onclick="exportSavedTtsVoices()" style="font-size:12px;padding:4px 10px;border-radius:6px;">导出</button>
+                            <button type="button" class="btn-secondary" onclick="triggerImportSavedTtsVoices()" style="font-size:12px;padding:4px 10px;border-radius:6px;">导入</button>
+                            <input type="file" id="tts-voice-library-file" accept="application/json,.json" style="display:none">
+                        </div>
+                        <div class="panel-param-group" data-gemini-tts-field>
+                            <label for="quick-tts-speaker-mode">模式</label>
+                            <select id="quick-tts-speaker-mode">
+                                <option value="single">单人</option>
+                                <option value="multi">双人对话</option>
+                            </select>
+                        </div>
+                        <div class="panel-param-group" data-gemini-tts-field>
+                            <label for="quick-tts-second-voice">第二音色</label>
+                            <select id="quick-tts-second-voice"></select>
+                        </div>
+                        <div class="panel-param-group">
                             <label for="quick-tts-tone">语气</label>
                             <select id="quick-tts-tone">
                                 <option value="natural">自然</option>
@@ -1630,13 +1669,28 @@
                             <label for="quick-tts-format">格式</label>
                             <select id="quick-tts-format">
                                 <option value="mp3">mp3</option>
+                                <option value="opus">opus</option>
+                                <option value="aac">aac</option>
+                                <option value="flac">flac</option>
                                 <option value="wav">wav</option>
-                                <option value="ogg">ogg</option>
+                                <option value="pcm">pcm</option>
+                                <option value="ogg">ogg 兼容</option>
+                            </select>
+                        </div>
+                        <div class="panel-param-group" data-openai-tts-field>
+                            <label for="quick-tts-stream-format">流格式</label>
+                            <select id="quick-tts-stream-format">
+                                <option value="audio">audio</option>
+                                <option value="sse">sse</option>
                             </select>
                         </div>
                         <div class="panel-param-group wide">
-                            <label for="quick-tts-instructions">细节</label>
-                            <input type="text" id="quick-tts-instructions" placeholder="例：像播客主持人，停顿自然，结尾上扬">
+                            <label for="quick-tts-speakers">说话人</label>
+                            <input type="text" id="quick-tts-speakers" placeholder="单人：2号；双人：主人,2号">
+                        </div>
+                        <div class="panel-param-group wide">
+                            <label for="quick-tts-instructions">音色导演</label>
+                            <textarea id="quick-tts-instructions" placeholder="例：年轻成熟女性，温柔细腻，微气声，尾音轻微上扬，停顿自然"></textarea>
                         </div>
                     </div>
                     <div class="panel-param-row" id="video-param-row">
@@ -1793,11 +1847,12 @@
                                     </div>
                                     <div class="settings-group"><label>节点名称</label><input type="text" id="set-voice-relay-name" placeholder="例如：语音主节点"></div>
                                     <div class="settings-group"><label>备注信息</label><input type="text" id="set-voice-relay-note" placeholder="例如：高保真 / 中文音色"></div>
-                                    <div class="settings-group">
+                                    <div class="settings-group" style="display:none;">
                                         <label>提供商</label>
                                         <select id="set-voice-provider" onchange="handleVoiceProviderInputChange()">
+                                            <option value="auto">智能自动</option>
                                             <option value="compat">通用兼容</option>
-                                            <option value="modeb">兼容模式二</option>
+                                            <option value="modeb">Gemini 官方 TTS</option>
                                             <option value="modec">兼容模式三</option>
                                         </select>
                                     </div>
@@ -2174,16 +2229,24 @@
         const DEFAULT_API_KEY = "";
         const DEFAULT_IMAGE_API_URL = "";
         const DEFAULT_IMAGE_API_KEY = DEFAULT_API_KEY;
-        const DEFAULT_VOICE_API_URL = "";
+        const DEFAULT_VOICE_API_URL = "https://generativelanguage.googleapis.com/v1beta";
         const DEFAULT_VOICE_API_KEY = DEFAULT_API_KEY;
         const DEFAULT_IMAGE_MODEL = "";
-        const DEFAULT_TTS_MODEL = "";
+        const DEFAULT_COMPAT_TTS_MODEL = "gpt-4o-mini-tts";
+        const DEFAULT_TTS_MODEL = "gemini-3.1-flash-tts-preview";
         const DEFAULT_TTS_VOICE = "";
         const DEFAULT_TTS_FORMAT = "mp3";
+        const DEFAULT_TTS_STREAM_FORMAT = "audio";
+        const DEFAULT_TTS_CUSTOM_VOICE_ID = "";
+        const DEFAULT_SAVED_TTS_VOICES = [];
         const DEFAULT_TTS_SPEED = 1;
         const DEFAULT_TTS_TONE = "natural";
         const DEFAULT_TTS_ACCENT = "auto";
-        const DEFAULT_TTS_INSTRUCTIONS = "";
+        const DEFAULT_TTS_SPEAKER_MODE = "single";
+        const DEFAULT_TTS_SPEAKER_NAME = "2号";
+        const DEFAULT_TTS_SECOND_SPEAKER_NAME = "主人";
+        const DEFAULT_TTS_SECOND_VOICE = "Kore";
+        const DEFAULT_TTS_INSTRUCTIONS = "年轻成熟女性声线，温柔、细腻、稳定，不尖锐、不稚嫩。声底偏暖，带轻微气声和极轻微尾音微哑感。语速中慢但不拖沓，停顿自然；称呼主人时语气稍微软化，尾音轻微上扬。";
         const ALT_TTS_VOICES = [
             ["Zephyr", "Zephyr · 明亮轻快"],
             ["Puck", "Puck · 俏皮活泼"],
@@ -2221,13 +2284,34 @@
             ["ash", "ash · 低沉稳重"],
             ["ballad", "ballad · 叙事感"],
             ["coral", "coral · 明亮亲和"],
+            ["cedar", "cedar · 温暖自然"],
             ["echo", "echo · 清晰偏男声"],
             ["fable", "fable · 故事感"],
+            ["marin", "marin · 柔和自然"],
             ["nova", "nova · 轻快偏女声"],
             ["onyx", "onyx · 深沉低音"],
             ["sage", "sage · 成熟自然"],
             ["shimmer", "shimmer · 柔和明亮"],
             ["verse", "verse · 表现力强"]
+        ];
+        const QWEN_TTS_VOICES = [
+            ["Cherry", "Cherry · 清亮自然"],
+            ["Ethan", "Ethan · 温和男声"],
+            ["Nofish", "Nofish · 活泼自然"],
+            ["Jennifer", "Jennifer · 英文女声"],
+            ["Ryan", "Ryan · 英文男声"],
+            ["Katerina", "Katerina · 成熟女声"],
+            ["Elias", "Elias · 沉稳男声"],
+            ["Jada", "Jada · 明亮女声"],
+            ["Dylan", "Dylan · 青年男声"],
+            ["Sunny", "Sunny · 阳光自然"],
+            ["Li", "Li · 中文自然"],
+            ["Marcus", "Marcus · 低沉男声"],
+            ["Roy", "Roy · 叙述男声"],
+            ["Peter", "Peter · 清晰男声"],
+            ["Rocky", "Rocky · 有力男声"],
+            ["Kiki", "Kiki · 轻快女声"],
+            ["Eric", "Eric · 自然男声"]
         ];
         const VOICE_TTS_ENGINES = [
             { id: "", name: " · 神经网络音色" },
@@ -3397,9 +3481,16 @@
             ttsModel: DEFAULT_TTS_MODEL,
             ttsVoice: DEFAULT_TTS_VOICE,
             ttsFormat: DEFAULT_TTS_FORMAT,
+            ttsStreamFormat: DEFAULT_TTS_STREAM_FORMAT,
+            ttsCustomVoiceId: DEFAULT_TTS_CUSTOM_VOICE_ID,
+            savedTtsVoices: JSON.parse(JSON.stringify(DEFAULT_SAVED_TTS_VOICES)),
             ttsSpeed: DEFAULT_TTS_SPEED,
             ttsTone: DEFAULT_TTS_TONE,
             ttsAccent: DEFAULT_TTS_ACCENT,
+            ttsSpeakerMode: DEFAULT_TTS_SPEAKER_MODE,
+            ttsSpeakerName: DEFAULT_TTS_SPEAKER_NAME,
+            ttsSecondSpeakerName: DEFAULT_TTS_SECOND_SPEAKER_NAME,
+            ttsSecondVoice: DEFAULT_TTS_SECOND_VOICE,
             ttsInstructions: DEFAULT_TTS_INSTRUCTIONS,
             // Video defaults are user-configured
             videoDuration: 5,
@@ -3482,7 +3573,8 @@
         }
 
         function isVoiceModeBApiUrl(url = "") {
-            return false;
+            const u = String(url || "").toLowerCase();
+            return /generativelanguage\.googleapis\.com|googleapis\.com\/.*\/models/.test(u);
         }
 
         function isVoiceModeCApiUrl(url = "") {
@@ -3494,12 +3586,79 @@
         }
 
         function isVoiceModeBTtsModel(model = "") {
-            return /(^|[-_])tts($|[-_])|preview-tts/i.test(String(model || ""));
+            const m = String(model || "").toLowerCase();
+            return /(^|[-_])tts($|[-_])|preview-tts|^chirp|^audio|^sonic/.test(m);
+        }
+
+        function isGeminiTtsModel(model = "") {
+            const m = String(model || "").toLowerCase().replace(/^models\//, "");
+            return /^gemini[-_.].*tts/.test(m)
+                || /^chirp/.test(m)
+                || /^sonic/.test(m)
+                || /^google[-_.].*tts/.test(m);
+        }
+
+        function isOpenAiCompatTtsModel(model = "") {
+            const m = String(model || "").toLowerCase().replace(/^models\//, "");
+            return /^gpt[-_.].*tts/.test(m)
+                || /^tts[-_.]/.test(m)
+                || /^openai[-_.].*tts/.test(m);
+        }
+
+        function isQwenTtsModel(model = "") {
+            const m = String(model || "").toLowerCase().replace(/^models\//, "");
+            return /^qwen.*tts/.test(m)
+                || /(^|[/_-])qwen.*tts/.test(m)
+                || /^alibaba.*qwen.*tts/.test(m)
+                || /^dashscope.*qwen.*tts/.test(m);
+        }
+
+        function isQwenCustomVoiceTtsModel(model = "") {
+            const m = String(model || "").toLowerCase().replace(/^models\//, "");
+            return isQwenTtsModel(m) && /(^|[-_])(?:vc|vd)(?:[-_]|$)/.test(m);
+        }
+
+        function isQwenVoiceDesignTtsModel(model = "") {
+            const m = String(model || "").toLowerCase().replace(/^models\//, "");
+            return isQwenTtsModel(m) && /(^|[-_])vd(?:[-_]|$)/.test(m);
+        }
+
+        function isQwenVoiceCloneTtsModel(model = "") {
+            const m = String(model || "").toLowerCase().replace(/^models\//, "");
+            return isQwenTtsModel(m) && /(^|[-_])vc(?:[-_]|$)/.test(m);
+        }
+
+        function isQwenRealtimeTtsModel(model = "") {
+            return /(^|[-_])realtime(?:[-_]|$)/i.test(String(model || "").replace(/^models\//, ""));
+        }
+
+        function isDashScopeNativeTtsEndpoint(endpoint = "") {
+            const value = String(endpoint || "").trim().toLowerCase();
+            return /dashscope\.aliyuncs\.com/.test(value)
+                || /(?:127\.0\.0\.1|localhost):8787/.test(value)
+                || /\/api\/v1\/services\/(?:aigc|audio)\//.test(value);
+        }
+
+        function getVoiceActiveModelId(relay = null) {
+            return String(relay?.activeModelId || relay?.model || relay?.ttsModel || config.ttsModel || DEFAULT_COMPAT_TTS_MODEL).trim();
+        }
+
+        function getEffectiveVoiceProvider(relay = null, model = "") {
+            const activeModel = String(model || getVoiceActiveModelId(relay)).trim();
+            if (VOICE_TTS_ENGINES.some(item => item.id && item.id === activeModel)) return "modec";
+            if (isQwenTtsModel(activeModel)) return "qwen";
+            if (isGeminiTtsModel(activeModel)) return "modeb";
+            if (isOpenAiCompatTtsModel(activeModel)) return "compat";
+            if (isVoiceModeBApiUrl(relay?.apiUrl)) return "modeb";
+            if (isVoiceModeCApiUrl(relay?.apiUrl)) return "modec";
+            return "compat";
         }
 
         function normalizeVoiceModeBApiBaseUrl(url = "") {
             let base = String(url || "").trim().replace(/\/+$/, "");
-            base = base.replace(/\/models(?:\/.*)?$/i, "");
+            // 提取 Google API 版本根路径 (到 /v1beta, /v1alpha 等为止)
+            const rootMatch = base.match(/^(.*\/v1(?:beta|alpha)?(?:\d*))/i);
+            if (rootMatch) base = rootMatch[1];
             return base.replace(/\/+$/, "");
         }
 
@@ -3670,27 +3829,20 @@
         function ensureVoiceRelayState(relay) {
             if (!relay) return null;
             const providerRaw = String(relay.provider || relay.voiceProvider || "").trim().toLowerCase();
-            if (["compat", "modeb", "modec"].includes(providerRaw)) {
-                relay.provider = providerRaw;
-            } else if (isVoiceModeCApiUrl(relay.apiUrl)) {
-                relay.provider = "modec";
-            } else if (isVoiceModeBApiUrl(relay.apiUrl)) {
-                relay.provider = "modeb";
-            } else {
-                relay.provider = "compat";
-            }
+            relay.provider = ["auto", "compat", "modeb", "modec"].includes(providerRaw) ? providerRaw : "auto";
             relay.region = String(relay.region || relay.sigRegion || "").trim() || "";
             relay.secretKey = String(relay.secretKey || relay.sigSecretAccessKey || "").trim();
             relay.sessionToken = String(relay.sessionToken || relay.sigSessionToken || "").trim();
-            relay.apiUrl = relay.provider === "modec"
+            const inferredProvider = getEffectiveVoiceProvider(relay);
+            relay.apiUrl = inferredProvider === "modec"
                 ? normalizeVoiceApiUrl(relay.apiUrl || normalizeVoiceModeCApiUrl(relay.region), config.voiceApiUrl || config.apiUrl || DEFAULT_VOICE_API_URL)
                 : normalizeVoiceApiUrl(relay.apiUrl || "", config.voiceApiUrl || config.apiUrl || DEFAULT_VOICE_API_URL);
             relay.apiKey = String(relay.apiKey || "").trim();
-            const rawModel = String(relay.model || relay.ttsModel || config.ttsModel || DEFAULT_TTS_MODEL).trim();
-            const fallbackModel = DEFAULT_TTS_MODEL;
+            const fallbackModel = inferredProvider === "modeb" ? DEFAULT_TTS_MODEL : DEFAULT_COMPAT_TTS_MODEL;
+            const inheritedModel = config.ttsModel || fallbackModel;
+            const rawModel = String(relay.model || relay.ttsModel || inheritedModel || fallbackModel).trim();
             relay.model = rawModel && !containsMojibake(rawModel) ? rawModel : fallbackModel;
             if (isVoiceModeBApiUrl(relay.apiUrl) && !isVoiceModeBTtsModel(relay.model)) relay.model = fallbackModel;
-            if (relay.provider === "modec" && !VOICE_TTS_ENGINES.some(item => item.id === relay.model)) relay.model = fallbackModel;
             relay.ttsModel = relay.model;
             relay.selectedModels = normalizeSelectedModels(
                 relay.selectedModels || [{ id: relay.model, name: relay.model }],
@@ -3706,7 +3858,7 @@
                 }
                 if (relay.fetchedModels.length === 0) relay.fetchedModels = normalizeFetchedModels([fallbackModel]);
             }
-            if (relay.provider === "modec") {
+            if (getEffectiveVoiceProvider(relay, relay.model) === "modec") {
                 relay.fetchedModels = normalizeFetchedModels(VOICE_TTS_ENGINES.map(item => item.id));
                 relay.selectedModels = relay.selectedModels.filter(item => VOICE_TTS_ENGINES.some(engine => engine.id === item.id));
                 if (relay.selectedModels.length === 0) {
@@ -3715,7 +3867,6 @@
             }
             relay.activeModelId = String(relay.activeModelId || relay.model || "").trim() || relay.fetchedModels[0] || relay.model;
             if (isVoiceModeBApiUrl(relay.apiUrl) && !isVoiceModeBTtsModel(relay.activeModelId)) relay.activeModelId = relay.selectedModels[0]?.id || fallbackModel;
-            if (relay.provider === "modec" && !VOICE_TTS_ENGINES.some(item => item.id === relay.activeModelId)) relay.activeModelId = fallbackModel;
             return relay;
         }
 
@@ -4160,12 +4311,8 @@
                     ? maybeActive
                     : (selectedIds[0] || normalizedRelay.fetchedModels[0] || DEFAULT_IMAGE_MODEL);
             } else if (type === "voice") {
-                const providerRaw = String(relay?.provider || relay?.voiceProvider || "").trim().toLowerCase();
-                const provider = ["compat", "modeb", "modec"].includes(providerRaw)
-                    ? providerRaw
-                    : (isVoiceModeCApiUrl(apiUrl) ? "modec" : (isVoiceModeBApiUrl(apiUrl) ? "modeb" : "compat"));
-                const model = String(relay?.activeModelId || relay?.model || relay?.ttsModel || config.ttsModel || DEFAULT_TTS_MODEL).trim() || DEFAULT_TTS_MODEL;
-                normalizedRelay.provider = provider;
+                const model = String(relay?.activeModelId || relay?.model || relay?.ttsModel || config.ttsModel || DEFAULT_COMPAT_TTS_MODEL).trim() || DEFAULT_COMPAT_TTS_MODEL;
+                normalizedRelay.provider = "auto";
                 normalizedRelay.region = String(relay?.region || relay?.sigRegion || "").trim() || "";
                 normalizedRelay.secretKey = String(relay?.secretKey || relay?.sigSecretAccessKey || "").trim();
                 normalizedRelay.sessionToken = String(relay?.sessionToken || relay?.sigSessionToken || "").trim();
@@ -4628,11 +4775,19 @@
             if (!config.ttsModel) config.ttsModel = DEFAULT_TTS_MODEL;
             if (!config.ttsVoice) config.ttsVoice = DEFAULT_TTS_VOICE;
             config.ttsFormat = (config.ttsFormat || DEFAULT_TTS_FORMAT).toLowerCase();
-            if (!['mp3', 'wav', 'ogg'].includes(config.ttsFormat)) config.ttsFormat = DEFAULT_TTS_FORMAT;
+            if (!['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm', 'ogg'].includes(config.ttsFormat)) config.ttsFormat = DEFAULT_TTS_FORMAT;
+            config.ttsStreamFormat = String(config.ttsStreamFormat || DEFAULT_TTS_STREAM_FORMAT).toLowerCase();
+            if (!["audio", "sse"].includes(config.ttsStreamFormat)) config.ttsStreamFormat = DEFAULT_TTS_STREAM_FORMAT;
+            if (typeof config.ttsCustomVoiceId !== "string") config.ttsCustomVoiceId = DEFAULT_TTS_CUSTOM_VOICE_ID;
+            config.savedTtsVoices = normalizeSavedTtsVoices(config.savedTtsVoices);
             const speed = parseFloat(config.ttsSpeed);
             config.ttsSpeed = Number.isFinite(speed) ? Math.max(0.25, Math.min(4, speed)) : DEFAULT_TTS_SPEED;
             if (!["natural", "warm", "bright", "professional", "story", "calm", "dramatic", "whisper"].includes(config.ttsTone)) config.ttsTone = DEFAULT_TTS_TONE;
             if (!["auto", "mandarin", "taiwan", "cantonese", "american", "british"].includes(config.ttsAccent)) config.ttsAccent = DEFAULT_TTS_ACCENT;
+            config.ttsSpeakerMode = config.ttsSpeakerMode === "multi" ? "multi" : DEFAULT_TTS_SPEAKER_MODE;
+            if (typeof config.ttsSpeakerName !== "string" || !config.ttsSpeakerName.trim()) config.ttsSpeakerName = DEFAULT_TTS_SPEAKER_NAME;
+            if (typeof config.ttsSecondSpeakerName !== "string" || !config.ttsSecondSpeakerName.trim()) config.ttsSecondSpeakerName = DEFAULT_TTS_SECOND_SPEAKER_NAME;
+            if (!ALT_TTS_VOICES.some(([value]) => value === config.ttsSecondVoice)) config.ttsSecondVoice = DEFAULT_TTS_SECOND_VOICE;
             if (typeof config.ttsInstructions !== "string") config.ttsInstructions = DEFAULT_TTS_INSTRUCTIONS;
             if (typeof config.videoDuration !== "number") config.videoDuration = 5;
             if (config.videoDuration < 1 || config.videoDuration > 30) config.videoDuration = 5;
@@ -4786,11 +4941,24 @@
         const voiceParamRow = document.getElementById("voice-param-row");
         const videoParamRow = document.getElementById("video-param-row");
         const quickTtsVoiceInput = document.getElementById("quick-tts-voice");
+        const quickTtsCustomVoiceInput = document.getElementById("quick-tts-custom-voice");
+        const quickTtsDesignVoiceBtn = document.getElementById("quick-tts-design-voice");
+        const quickTtsCloneVoiceBtn = document.getElementById("quick-tts-clone-voice");
+        const quickTtsSaveVoiceBtn = document.getElementById("quick-tts-save-voice");
+        const quickTtsCloneFileGroup = document.getElementById("tts-voice-clone-file-group");
+        const quickTtsCloneFileInput = document.getElementById("quick-tts-clone-file");
+        const quickTtsVoiceLibraryGroup = document.getElementById("tts-voice-library-group");
+        const quickTtsVoiceLibrarySelect = document.getElementById("quick-tts-voice-library");
+        const quickTtsVoiceLibraryFile = document.getElementById("tts-voice-library-file");
+        const quickTtsSpeakerModeSelect = document.getElementById("quick-tts-speaker-mode");
+        const quickTtsSecondVoiceSelect = document.getElementById("quick-tts-second-voice");
         const quickTtsToneSelect = document.getElementById("quick-tts-tone");
         const quickTtsSpeedInput = document.getElementById("quick-tts-speed");
         const quickTtsSpeedVal = document.getElementById("quick-tts-speed-val");
         const quickTtsAccentSelect = document.getElementById("quick-tts-accent");
         const quickTtsFormatSelect = document.getElementById("quick-tts-format");
+        const quickTtsStreamFormatSelect = document.getElementById("quick-tts-stream-format");
+        const quickTtsSpeakersInput = document.getElementById("quick-tts-speakers");
         const quickTtsInstructionsInput = document.getElementById("quick-tts-instructions");
         const quickVideoDurationInput = document.getElementById("quick-video-duration");
         const quickVideoAspectSelect = document.getElementById("quick-video-aspect");
@@ -4895,6 +5063,7 @@
             persistPanelSessions(relayType);
             relaySelect.value = relay.id;
             populateModelSelect(relayType);
+            if (relayType === "voice") syncQuickPanelParamsFromConfig();
             if (!silent) showToast(`🌐 已切换${getRelayTypeLabel(relayType)}中转：${relay.name}`);
         }
 
@@ -4992,8 +5161,11 @@
             }
             if(currentPanel==='voice'){
                 const relay=ensureVoiceRelayState(getActiveRelayByType("voice"));
-                const voice=relay?.provider==="modec" && (!config.ttsVoice || config.ttsVoice===DEFAULT_TTS_VOICE) ? "Zhiyu" : relay?.provider==="modeb" && (!config.ttsVoice || config.ttsVoice===DEFAULT_TTS_VOICE) ? "Kore" : (config.ttsVoice || DEFAULT_TTS_VOICE);
-                document.getElementById("model-hint").innerText = `语音模型: ${config.ttsModel || DEFAULT_TTS_MODEL} · ${voice}`;
+                const provider = getEffectiveVoiceProvider(relay);
+                const isQwenCustomVoice = provider === "qwen" && isQwenCustomVoiceTtsModel(getVoiceActiveModelId(relay));
+                const voice=isQwenCustomVoice ? (config.ttsCustomVoiceId || "需填自定义音色") : provider==="modec" && (!config.ttsVoice || config.ttsVoice===DEFAULT_TTS_VOICE) ? "Zhiyu" : provider==="modeb" && (!config.ttsVoice || config.ttsVoice===DEFAULT_TTS_VOICE) ? "Sulafat" : provider==="qwen" && (!config.ttsVoice || config.ttsVoice===DEFAULT_TTS_VOICE) ? "Cherry" : (config.ttsVoice || DEFAULT_TTS_VOICE);
+                const providerLabel = provider === "modeb" ? "Gemini" : provider === "modec" ? "模式三" : provider === "qwen" ? "Qwen" : "OpenAI";
+                document.getElementById("model-hint").innerText = `语音模型: ${config.ttsModel || DEFAULT_COMPAT_TTS_MODEL} · ${providerLabel} · ${voice}`;
                 return;
             }
             const sel = modelSelect.value;
@@ -5014,9 +5186,14 @@
         function populateTtsVoiceSelect() {
             if (!quickTtsVoiceInput) return;
             const relay = getActiveRelayByType("voice");
-            const provider = ensureVoiceRelayState(relay)?.provider || "compat";
-            const voices = provider === "modec" ? VOICE_TTS_VOICES : provider === "modeb" ? ALT_TTS_VOICES : COMPAT_TTS_VOICES;
-            const fallback = provider === "modec" ? "Zhiyu" : provider === "modeb" ? "Kore" : DEFAULT_TTS_VOICE;
+            const normalizedRelay = ensureVoiceRelayState(relay);
+            const provider = getEffectiveVoiceProvider(normalizedRelay);
+            const activeModel = getVoiceActiveModelId(normalizedRelay);
+            const isQwenCustomVoice = provider === "qwen" && isQwenCustomVoiceTtsModel(activeModel);
+            const voices = isQwenCustomVoice
+                ? [["", "使用自定义音色 ID"]]
+                : provider === "modec" ? VOICE_TTS_VOICES : provider === "modeb" ? ALT_TTS_VOICES : provider === "qwen" ? QWEN_TTS_VOICES : COMPAT_TTS_VOICES;
+            const fallback = isQwenCustomVoice ? "" : provider === "modec" ? "Zhiyu" : provider === "modeb" ? "Sulafat" : provider === "qwen" ? "Cherry" : "alloy";
             let current = config.ttsVoice || fallback;
             if (!voices.some(([value]) => value === current)) {
                 current = fallback;
@@ -5031,24 +5208,96 @@
                 quickTtsVoiceInput.appendChild(option);
             });
             quickTtsVoiceInput.value = current;
+
+            if (quickTtsSecondVoiceSelect) {
+                quickTtsSecondVoiceSelect.innerHTML = "";
+                ALT_TTS_VOICES.forEach(([value, label]) => {
+                    const option = document.createElement("option");
+                    option.value = value;
+                    option.textContent = label;
+                    option.title = label;
+                    quickTtsSecondVoiceSelect.appendChild(option);
+                });
+                const secondVoice = ALT_TTS_VOICES.some(([value]) => value === config.ttsSecondVoice)
+                    ? config.ttsSecondVoice
+                    : DEFAULT_TTS_SECOND_VOICE;
+                config.ttsSecondVoice = secondVoice;
+                quickTtsSecondVoiceSelect.value = secondVoice;
+            }
+            updateTtsGeminiControls(provider);
+        }
+
+        function updateTtsGeminiControls(provider) {
+            const isGemini = provider === "modeb";
+            const isCompat = provider === "compat";
+            const isQwen = provider === "qwen";
+            const activeVoiceModel = getVoiceActiveModelId(ensureVoiceRelayState(getActiveRelayByType("voice")));
+            const isQwenCustomVoice = isQwen && isQwenCustomVoiceTtsModel(activeVoiceModel);
+            const isQwenVoiceDesign = isQwen && isQwenVoiceDesignTtsModel(activeVoiceModel);
+            const isQwenVoiceClone = isQwen && isQwenVoiceCloneTtsModel(activeVoiceModel);
+            const isQwenFlash = isQwen && !isQwenCustomVoice;
+            document.querySelectorAll("[data-gemini-tts-field]").forEach(el => {
+                el.style.display = isGemini ? "" : "none";
+            });
+            document.querySelectorAll("[data-openai-tts-field]").forEach(el => {
+                el.style.display = isCompat ? "" : "none";
+            });
+            if (quickTtsVoiceInput?.parentElement) quickTtsVoiceInput.parentElement.style.display = isQwenCustomVoice ? "none" : "";
+            if (quickTtsCustomVoiceInput?.parentElement) {
+                quickTtsCustomVoiceInput.parentElement.style.display = isQwenCustomVoice ? "" : "none";
+                quickTtsCustomVoiceInput.placeholder = isQwenVoiceClone ? "克隆后自动填入，或粘贴已有 VC 音色 ID" : isQwenVoiceDesign ? "设计后自动填入，或粘贴已有 VD 音色 ID" : "voice_... 可选";
+            }
+            if (quickTtsDesignVoiceBtn) quickTtsDesignVoiceBtn.style.display = isQwenVoiceDesign ? "" : "none";
+            if (quickTtsCloneVoiceBtn) quickTtsCloneVoiceBtn.style.display = isQwenVoiceClone ? "" : "none";
+            if (quickTtsCloneFileGroup) quickTtsCloneFileGroup.style.display = isQwenVoiceClone ? "" : "none";
+            if (quickTtsSaveVoiceBtn) quickTtsSaveVoiceBtn.style.display = isQwenCustomVoice ? "" : "none";
+            if (quickTtsVoiceLibraryGroup) quickTtsVoiceLibraryGroup.style.display = isQwenCustomVoice ? "" : "none";
+            if (quickTtsFormatSelect?.parentElement) quickTtsFormatSelect.parentElement.style.display = isGemini ? "none" : "";
+            if (quickTtsToneSelect?.parentElement) quickTtsToneSelect.parentElement.style.display = isQwenCustomVoice ? "none" : "";
+            if (quickTtsSpeedInput?.parentElement) quickTtsSpeedInput.parentElement.style.display = isQwenCustomVoice ? "none" : "";
+            if (quickTtsAccentSelect?.parentElement) quickTtsAccentSelect.parentElement.style.display = (isGemini || isQwenCustomVoice) ? "none" : "";
+            if (quickTtsInstructionsInput?.parentElement) quickTtsInstructionsInput.parentElement.style.display = (isQwenFlash || isQwenVoiceClone) ? "none" : "";
+            if (isQwen && quickTtsFormatSelect && !["mp3", "wav"].includes(quickTtsFormatSelect.value)) quickTtsFormatSelect.value = "mp3";
+            if (quickTtsSecondVoiceSelect) {
+                quickTtsSecondVoiceSelect.parentElement.style.display = isGemini && config.ttsSpeakerMode === "multi" ? "" : "none";
+            }
+            if (quickTtsSpeakersInput) {
+                quickTtsSpeakersInput.parentElement.style.display = isGemini && config.ttsSpeakerMode === "multi" ? "" : "none";
+                quickTtsSpeakersInput.placeholder = config.ttsSpeakerMode === "multi" ? "双人：主人,2号" : "单人：2号";
+            }
         }
 
         function syncQuickPanelParamsFromConfig() {
             const voiceRelay = getActiveRelayByType("voice");
-            const voiceProvider = ensureVoiceRelayState(voiceRelay)?.provider || "compat";
+            const voiceProvider = getEffectiveVoiceProvider(ensureVoiceRelayState(voiceRelay));
             populateTtsVoiceSelect();
+            if (quickTtsSpeakerModeSelect) quickTtsSpeakerModeSelect.value = config.ttsSpeakerMode || DEFAULT_TTS_SPEAKER_MODE;
+            if (quickTtsSecondVoiceSelect) quickTtsSecondVoiceSelect.value = config.ttsSecondVoice || DEFAULT_TTS_SECOND_VOICE;
+            if (quickTtsCustomVoiceInput) quickTtsCustomVoiceInput.value = config.ttsCustomVoiceId || DEFAULT_TTS_CUSTOM_VOICE_ID;
             if (quickTtsToneSelect) quickTtsToneSelect.value = config.ttsTone || DEFAULT_TTS_TONE;
             if (quickTtsSpeedInput) quickTtsSpeedInput.value = String(config.ttsSpeed || DEFAULT_TTS_SPEED);
             if (quickTtsSpeedVal) quickTtsSpeedVal.textContent = `${(config.ttsSpeed || DEFAULT_TTS_SPEED).toFixed(2)}x`;
             if (quickTtsAccentSelect) quickTtsAccentSelect.value = config.ttsAccent || DEFAULT_TTS_ACCENT;
             if (quickTtsFormatSelect) quickTtsFormatSelect.value = config.ttsFormat || DEFAULT_TTS_FORMAT;
+            if (quickTtsStreamFormatSelect) quickTtsStreamFormatSelect.value = config.ttsStreamFormat || DEFAULT_TTS_STREAM_FORMAT;
+            if (quickTtsSpeakersInput) quickTtsSpeakersInput.value = config.ttsSpeakerMode === "multi"
+                ? `${config.ttsSpeakerName || DEFAULT_TTS_SPEAKER_NAME},${config.ttsSecondSpeakerName || DEFAULT_TTS_SECOND_SPEAKER_NAME}`
+                : (config.ttsSpeakerName || DEFAULT_TTS_SPEAKER_NAME);
             if (quickTtsInstructionsInput) quickTtsInstructionsInput.value = config.ttsInstructions || DEFAULT_TTS_INSTRUCTIONS;
+            renderSavedTtsVoiceLibrary();
+            updateTtsGeminiControls(voiceProvider);
             if (quickVideoDurationInput) quickVideoDurationInput.value = String(config.videoDuration || 5);
             if (quickVideoAspectSelect) quickVideoAspectSelect.value = config.videoAspectRatio || "16:9";
         }
 
         function saveQuickVoiceParams() {
             config.ttsVoice = quickTtsVoiceInput?.value.trim() || DEFAULT_TTS_VOICE;
+            config.ttsCustomVoiceId = quickTtsCustomVoiceInput?.value.trim() || DEFAULT_TTS_CUSTOM_VOICE_ID;
+            config.ttsSpeakerMode = quickTtsSpeakerModeSelect?.value === "multi" ? "multi" : DEFAULT_TTS_SPEAKER_MODE;
+            const speakerParts = String(quickTtsSpeakersInput?.value || "").split(/[，,]/).map(item => item.trim()).filter(Boolean);
+            config.ttsSpeakerName = speakerParts[0] || config.ttsSpeakerName || DEFAULT_TTS_SPEAKER_NAME;
+            config.ttsSecondSpeakerName = speakerParts[1] || config.ttsSecondSpeakerName || DEFAULT_TTS_SECOND_SPEAKER_NAME;
+            config.ttsSecondVoice = quickTtsSecondVoiceSelect?.value || DEFAULT_TTS_SECOND_VOICE;
             config.ttsTone = quickTtsToneSelect?.value || DEFAULT_TTS_TONE;
             const speed = parseFloat(quickTtsSpeedInput?.value || String(DEFAULT_TTS_SPEED));
             config.ttsSpeed = Number.isFinite(speed) ? Math.max(0.25, Math.min(4, speed)) : DEFAULT_TTS_SPEED;
@@ -5056,8 +5305,11 @@
             if (quickTtsSpeedVal) quickTtsSpeedVal.textContent = `${config.ttsSpeed.toFixed(2)}x`;
             config.ttsAccent = quickTtsAccentSelect?.value || DEFAULT_TTS_ACCENT;
             const fmt = (quickTtsFormatSelect?.value || DEFAULT_TTS_FORMAT).toLowerCase();
-            config.ttsFormat = ["mp3", "wav", "ogg"].includes(fmt) ? fmt : DEFAULT_TTS_FORMAT;
+            config.ttsFormat = ["mp3", "opus", "aac", "flac", "wav", "pcm", "ogg"].includes(fmt) ? fmt : DEFAULT_TTS_FORMAT;
+            const streamFormat = (quickTtsStreamFormatSelect?.value || DEFAULT_TTS_STREAM_FORMAT).toLowerCase();
+            config.ttsStreamFormat = ["audio", "sse"].includes(streamFormat) ? streamFormat : DEFAULT_TTS_STREAM_FORMAT;
             config.ttsInstructions = quickTtsInstructionsInput?.value.trim() || DEFAULT_TTS_INSTRUCTIONS;
+            updateTtsGeminiControls(getEffectiveVoiceProvider(ensureVoiceRelayState(getActiveRelayByType("voice"))));
             persistConfig();
             updateModelHint();
         }
@@ -5838,16 +6090,246 @@ ${packLines}`;
             if (value.startsWith("data:")) return value;
             if (/^https?:\/\//i.test(value)) return value;
             const fmt = (formatHint || "mp3").toLowerCase();
-            const mime = fmt === "wav" ? "audio/wav" : fmt === "ogg" ? "audio/ogg" : "audio/mpeg";
+            const mime = getAudioMimeForFormat(fmt);
             return `data:${mime};base64,${value}`;
+        }
+
+        function getAudioMimeForFormat(format = "mp3") {
+            const fmt = String(format || "mp3").toLowerCase();
+            if (fmt === "wav") return "audio/wav";
+            if (fmt === "ogg" || fmt === "opus") return "audio/ogg";
+            if (fmt === "aac") return "audio/aac";
+            if (fmt === "flac") return "audio/flac";
+            if (fmt === "pcm") return "audio/wav";
+            return "audio/mpeg";
+        }
+
+        function normalizeSavedTtsVoices(items) {
+            const list = Array.isArray(items) ? items : [];
+            const seen = new Set();
+            return list.map(item => {
+                const id = String(item?.id || "").trim();
+                if (!id || seen.has(id)) return null;
+                seen.add(id);
+                const model = String(item?.model || "").trim();
+                const name = String(item?.name || "").trim() || id.slice(0, 18);
+                const description = String(item?.description || "").trim();
+                return {
+                    id,
+                    name: name.slice(0, 32),
+                    model,
+                    description,
+                    createdAt: Number(item?.createdAt) || Date.now()
+                };
+            }).filter(Boolean).slice(0, 50);
+        }
+
+        function renderSavedTtsVoiceLibrary() {
+            if (!quickTtsVoiceLibrarySelect) return;
+            config.savedTtsVoices = normalizeSavedTtsVoices(config.savedTtsVoices);
+            quickTtsVoiceLibrarySelect.innerHTML = "";
+            const empty = document.createElement("option");
+            empty.value = "";
+            empty.textContent = config.savedTtsVoices.length ? "选择已保存音色" : "暂无已保存音色";
+            quickTtsVoiceLibrarySelect.appendChild(empty);
+            config.savedTtsVoices.forEach(item => {
+                const option = document.createElement("option");
+                option.value = item.id;
+                option.textContent = `${item.name} · ${item.model || "音色"}`;
+                option.title = `${item.id}${item.description ? "\n" + item.description : ""}`;
+                quickTtsVoiceLibrarySelect.appendChild(option);
+            });
+        }
+
+        function upsertSavedTtsVoice({ id, name, model, description, select = false }) {
+            const voiceId = String(id || "").trim();
+            if (!voiceId) return null;
+            const existing = (config.savedTtsVoices || []).find(item => item?.id === voiceId);
+            const record = {
+                id: voiceId,
+                name: String(name || existing?.name || `音色${(config.savedTtsVoices || []).length + 1}`).trim().slice(0, 32),
+                model: String(model || existing?.model || "").trim(),
+                description: String(description || existing?.description || "").trim(),
+                createdAt: Number(existing?.createdAt) || Date.now()
+            };
+            config.savedTtsVoices = normalizeSavedTtsVoices([
+                record,
+                ...(config.savedTtsVoices || []).filter(item => item?.id !== voiceId)
+            ]);
+            renderSavedTtsVoiceLibrary();
+            if (select && quickTtsVoiceLibrarySelect) quickTtsVoiceLibrarySelect.value = voiceId;
+            return record;
+        }
+
+        function getVoiceTtsEndpointForProvider(endpoint = "", provider = "compat") {
+            const raw = String(endpoint || "").trim().replace(/\/+$/, "");
+            if (!raw) return raw;
+            if (provider === "qwen") {
+                const qwenPath = "/api/v1/services/aigc/multimodal-generation/generation";
+                if (/\/api\/v1\/services\/aigc\/multimodal-generation\/generation\/?$/i.test(raw)) return raw;
+                if (/\/compatible-mode\/v1(?:\/audio\/speech|\/tts)?\/?$/i.test(raw)) {
+                    return raw.replace(/\/compatible-mode\/v1(?:\/audio\/speech|\/tts)?\/?$/i, qwenPath);
+                }
+                if (/\/v1(?:\/audio\/speech|\/tts)?\/?$/i.test(raw)) {
+                    return raw.replace(/\/v1(?:\/audio\/speech|\/tts)?\/?$/i, qwenPath);
+                }
+                return `${raw}${qwenPath}`;
+            }
+            return raw;
+        }
+
+        function formatNetworkFetchError(err, context = {}) {
+            const message = String(err?.message || err || "");
+            const url = String(context.url || context.endpoint || "");
+            if (/failed to fetch|networkerror|load failed/i.test(message)) {
+                const origin = window.location?.origin || "";
+                const isFileOrigin = origin === "null" || window.location?.protocol === "file:";
+                const isDashScope = /dashscope\.aliyuncs\.com/i.test(url);
+                if (isDashScope) {
+                    return [
+                        "浏览器被 DashScope CORS 拦截，前端网页不能直接请求阿里云官方接口。",
+                        isFileOrigin ? "当前页面是 file:// 打开，origin 为 null；请先用 http://127.0.0.1:8000 打开页面。" : "",
+                        "仍被拦截时，请使用本地代理：运行 start-dashscope-proxy.ps1，并把语音 API 地址改成 http://127.0.0.1:8787/compatible-mode/v1。"
+                    ].filter(Boolean).join(" ");
+                }
+                if (isFileOrigin) {
+                    return "浏览器网络请求失败。当前页面是 file:// 打开，origin 为 null；建议用本地服务器 http://127.0.0.1:8000 打开。";
+                }
+            }
+            return message || "请求失败";
+        }
+
+        function detectQwenLanguageType(text = "") {
+            const value = String(text || "");
+            if (/[\u4E00-\u9FFF]/.test(value)) return "Chinese";
+            if (/[ぁ-ゟ゠-ヿ]/.test(value)) return "Japanese";
+            if (/[가-힣]/.test(value)) return "Korean";
+            return "English";
+        }
+
+        function getQwenVoiceDesignEndpoint(endpoint = "") {
+            const raw = String(endpoint || "").trim().replace(/\/+$/, "");
+            const path = "/api/v1/services/audio/tts/customization";
+            if (!raw) return raw;
+            if (/\/api\/v1\/services\/audio\/tts\/customization\/?$/i.test(raw)) return raw;
+            if (/\/api\/v1\/services\/aigc\/multimodal-generation\/generation\/?$/i.test(raw)) {
+                return raw.replace(/\/api\/v1\/services\/aigc\/multimodal-generation\/generation\/?$/i, path);
+            }
+            if (/\/compatible-mode\/v1(?:\/audio\/speech|\/tts)?\/?$/i.test(raw)) {
+                return raw.replace(/\/compatible-mode\/v1(?:\/audio\/speech|\/tts)?\/?$/i, path);
+            }
+            if (/\/v1(?:\/audio\/speech|\/tts)?\/?$/i.test(raw)) {
+                return raw.replace(/\/v1(?:\/audio\/speech|\/tts)?\/?$/i, path);
+            }
+            return `${raw}${path}`;
+        }
+
+        function extractQwenDesignedVoice(payload) {
+            const candidates = [
+                payload?.output?.voice,
+                payload?.output?.voice_id,
+                payload?.output?.voiceId,
+                payload?.data?.voice,
+                payload?.data?.voice_id,
+                payload?.voice,
+                payload?.voice_id
+            ].map(item => String(item || "").trim()).filter(Boolean);
+            return candidates[0] || "";
+        }
+
+        function createQwenPreferredVoiceName() {
+            const seed = Math.random().toString(36).slice(2, 8);
+            const time = Date.now().toString(36).slice(-5);
+            return `v_${time}_${seed}`.slice(0, 16);
+        }
+
+        function fileToDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ""));
+                reader.onerror = () => reject(reader.error || new Error("读取参考音频失败"));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function formatQwenTtsHttpError({ url, status, errText, model, voice, isCustomVoice = false }) {
+            const raw = String(errText || "").trim();
+            let code = "";
+            let message = "";
+            try {
+                const data = JSON.parse(raw);
+                code = String(data?.code || "");
+                message = String(data?.message || "");
+            } catch (err) {
+                message = raw.substring(0, 220);
+            }
+            const hints = [];
+            if (status === 400 && /InvalidParameter|TTS speak request failed/i.test(`${code} ${message}`)) {
+                hints.push("可能原因：当前模型、音色 ID、文本语言或接口字段不被 Qwen TTS 接受。");
+                if (isCustomVoice) {
+                    hints.push("VC/VD 音色 ID 只能配创建它时的 target_model 使用；不要把 VD 设计音色拿去给 VC 模型用，也不要把 realtime 音色拿去给普通 REST 合成用。");
+                } else {
+                    hints.push("内置音色只适合 qwen3-tts-flash；VC/VD 模型必须使用克隆/设计生成的自定义音色 ID。");
+                }
+            }
+            if (status === 404) {
+                hints.push("这个地址没有阿里云原生 Qwen TTS 接口。若是普通中转节点，应走 OpenAI 兼容 /audio/speech；若是阿里云官方，请用 http://127.0.0.1:8787/compatible-mode/v1 或 dashscope.aliyuncs.com。");
+            }
+            if (/dashscope\.aliyuncs\.com/i.test(String(url || "")) && window.location?.hostname !== "127.0.0.1") {
+                hints.push("若浏览器还有 CORS 报错，请把语音 API 地址改成本地代理 http://127.0.0.1:8787/compatible-mode/v1。");
+            }
+            return [
+                `Qwen TTS 失败：HTTP ${status}${code ? ` ${code}` : ""}${message ? `: ${message}` : ""}`,
+                `当前模型：${model || "-"}`,
+                `当前音色：${voice || "-"}`,
+                ...hints
+            ].join("\n");
+        }
+
+        function formatCompatTtsHttpError({ status, errText, model, voice, endpoint }) {
+            const raw = String(errText || "").trim();
+            let code = "";
+            let message = "";
+            try {
+                const data = JSON.parse(raw);
+                code = String(data?.error?.code || data?.code || "");
+                message = String(data?.error?.message || data?.message || "");
+            } catch (err) {
+                message = raw.substring(0, 220);
+            }
+            const hints = [];
+            if (/not implemented|convert_request_failed/i.test(`${code} ${message}`)) {
+                hints.push("这个中转节点没有实现当前模型的语音合成转换。");
+                if (isQwenTtsModel(model)) {
+                    hints.push("qwen3-tts-flash 建议切到阿里云官方 DashScope 节点/本地 8787 代理使用；或者换成该中转明确支持的 OpenAI TTS 模型。");
+                }
+            }
+            return [
+                `HTTP ${status}${code ? ` ${code}` : ""}${message ? `: ${message}` : ""}`,
+                `当前接口：${endpoint || "-"}`,
+                `当前模型：${model || "-"}`,
+                `当前音色：${voice || "-"}`,
+                ...hints
+            ].join("\n");
         }
 
         function extractAudioFromApiResponse(payload, formatHint = "mp3") {
             const candidates = [
                 payload?.audio,
+                payload?.audio?.url,
+                payload?.audio?.data,
+                payload?.audio?.audio,
+                payload?.audio?.audio_base64,
                 payload?.audio_base64,
                 payload?.b64_json,
                 payload?.data,
+                payload?.data?.audio,
+                payload?.data?.url,
+                payload?.output?.audio,
+                payload?.output?.audio?.url,
+                payload?.output?.audio?.data,
+                payload?.output_audio?.data,
+                payload?.output_audio?.url,
                 payload?.url,
                 payload?.audio_url
             ];
@@ -5869,6 +6351,52 @@ ${packLines}`;
                 if (normalized) return normalized;
             }
             return null;
+        }
+
+        function extractBase64AudioCandidates(payload) {
+            const list = [];
+            const push = value => {
+                if (typeof value === "string" && value.trim()) list.push(value.trim());
+            };
+            push(payload?.audio);
+            push(payload?.audio_base64);
+            push(payload?.b64_json);
+            push(payload?.delta);
+            push(payload?.data);
+            push(payload?.audio?.data);
+            push(payload?.audio?.delta);
+            push(payload?.output_audio?.data);
+            push(payload?.output_audio?.delta);
+            if (Array.isArray(payload?.data)) {
+                payload.data.forEach(item => {
+                    if (typeof item === "string") push(item);
+                    else {
+                        push(item?.audio);
+                        push(item?.audio_base64);
+                        push(item?.b64_json);
+                        push(item?.delta);
+                        push(item?.url);
+                    }
+                });
+            }
+            return list;
+        }
+
+        function extractAudioFromSseText(text, formatHint = "mp3") {
+            const chunks = [];
+            String(text || "").split(/\r?\n/).forEach(line => {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith("data:")) return;
+                const raw = trimmed.replace(/^data:\s*/, "");
+                if (!raw || raw === "[DONE]") return;
+                try {
+                    extractBase64AudioCandidates(JSON.parse(raw)).forEach(value => chunks.push(value));
+                } catch (err) {
+                    if (/^[A-Za-z0-9+/=_-]+$/.test(raw)) chunks.push(raw);
+                }
+            });
+            if (!chunks.length) return null;
+            return normalizeOutputAudio(chunks.join(""), formatHint);
         }
 
         function extract语音模式AudioFromApiResponse(payload) {
@@ -6564,7 +7092,7 @@ ${packLines}`;
                 whisper: "Use a soft, quiet, intimate tone."
             };
             const accentMap = {
-                mandarin: "Prefer  Mandarin pronunciation when reading Chinese.",
+                mandarin: "Prefer Mandarin pronunciation when reading Chinese.",
                 taiwan: "Use a Taiwan Mandarin flavor when reading Chinese.",
                 cantonese: "Use a Cantonese-influenced Chinese delivery where appropriate.",
                 american: "Use an American English accent where appropriate.",
@@ -6579,6 +7107,57 @@ ${packLines}`;
             }
             if (config.ttsInstructions) pieces.push(config.ttsInstructions);
             return pieces.filter(Boolean).join(" ");
+        }
+
+        function getTtsSpeakerNames() {
+            const first = String(config.ttsSpeakerName || DEFAULT_TTS_SPEAKER_NAME).trim() || DEFAULT_TTS_SPEAKER_NAME;
+            const second = String(config.ttsSecondSpeakerName || DEFAULT_TTS_SECOND_SPEAKER_NAME).trim() || DEFAULT_TTS_SECOND_SPEAKER_NAME;
+            return { first, second: second === first ? `${second}2` : second };
+        }
+
+        function buildGeminiTtsPrompt(input, styleInstruction) {
+            const transcript = String(input || "").trim();
+            const { first, second } = getTtsSpeakerNames();
+            const profile = String(config.ttsInstructions || DEFAULT_TTS_INSTRUCTIONS).trim();
+            const mode = config.ttsSpeakerMode === "multi" ? "multi-speaker dialogue" : "single-speaker narration";
+            const speakerLine = config.ttsSpeakerMode === "multi"
+                ? `Speakers: keep "${first}" on the primary voice and "${second}" on the secondary voice. Preserve speaker labels if the transcript contains them.`
+                : `Speaker name/persona: ${first}.`;
+            return [
+                "Generate speech audio only. Do not answer, rewrite, summarize, or add extra words.",
+                `Mode: ${mode}.`,
+                speakerLine,
+                "Voice direction:",
+                profile,
+                styleInstruction,
+                "Read the transcript exactly as written. Keep Chinese pronunciation natural and clear. Use punctuation and line breaks as timing cues.",
+                "",
+                "Transcript:",
+                transcript
+            ].filter(Boolean).join("\n");
+        }
+
+        function buildGeminiSpeechConfig(primaryVoice) {
+            const voiceName = primaryVoice && primaryVoice !== DEFAULT_TTS_VOICE ? primaryVoice : "Sulafat";
+            if (config.ttsSpeakerMode === "multi") {
+                const { first, second } = getTtsSpeakerNames();
+                const secondVoice = ALT_TTS_VOICES.some(([value]) => value === config.ttsSecondVoice)
+                    ? config.ttsSecondVoice
+                    : DEFAULT_TTS_SECOND_VOICE;
+                return {
+                    multiSpeakerVoiceConfig: {
+                        speakerVoiceConfigs: [
+                            { speaker: first, voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+                            { speaker: second, voiceConfig: { prebuiltVoiceConfig: { voiceName: secondVoice } } }
+                        ]
+                    }
+                };
+            }
+            return {
+                voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName }
+                }
+            };
         }
 
         function escapeXml(text) {
@@ -6677,84 +7256,268 @@ ${packLines}`;
             return { data: `data:${mime};base64,${arrayBufferToBase64(buffer)}`, mime };
         }
 
+        async function requestQwenTtsSpeech({ endpoint, apiKey, model, voice, format, input, signal }) {
+            const cleanFormat = ["mp3", "wav"].includes(String(format || "").toLowerCase()) ? String(format || "").toLowerCase() : "mp3";
+            if (isQwenRealtimeTtsModel(model)) {
+                throw new Error("当前选择的是 Qwen Realtime 实时语音模型，它需要 WebSocket 实时接口；这个语音面板目前走普通 REST 合成。请先切换到非实时 VC 模型，例如 qwen3-tts-vc-2026-01-22，再使用克隆音色合成。");
+            }
+            const needsCustomVoice = isQwenCustomVoiceTtsModel(model);
+            const qwenVoice = needsCustomVoice ? String(config.ttsCustomVoiceId || "").trim() : (voice || "Cherry");
+            if (needsCustomVoice && !qwenVoice) {
+                throw new Error("当前选择的是 Qwen VC/VD 定制音色模型，需要在“自定义音色”里填写阿里云克隆/定制音色 ID。若想使用 Cherry/Kiki 等内置音色，请切换到 qwen3-tts-flash。");
+            }
+            const savedVoice = needsCustomVoice ? (config.savedTtsVoices || []).find(item => item?.id === qwenVoice) : null;
+            if (savedVoice?.model && savedVoice.model !== model) {
+                throw new Error(`当前音色“${savedVoice.name || qwenVoice}”是用 ${savedVoice.model} 创建的，不能直接给 ${model} 使用。请切回 ${savedVoice.model}，或用当前模型重新克隆/设计一个音色。`);
+            }
+            const parseQwenSpeechResponse = async (response, responseFormat = cleanFormat) => {
+                const contentType = (response.headers.get("content-type") || "").toLowerCase();
+                if (contentType.startsWith("audio/") || contentType.includes("octet-stream")) {
+                    const buffer = await response.arrayBuffer();
+                    const mime = contentType.split(";")[0] || getAudioMimeForFormat(responseFormat);
+                    return { data: `data:${mime};base64,${arrayBufferToBase64(buffer)}`, mime };
+                }
+                const data = await parseResponseAsJson(response);
+                const audioData = extractAudioFromApiResponse(data, responseFormat);
+                if (!audioData) throw new Error("Qwen TTS 语音接口未返回可解析音频");
+                return { data: audioData, mime: getAudioMimeForFormat(responseFormat) };
+            };
+            const url = getVoiceTtsEndpointForProvider(endpoint, "qwen");
+            const qwenPayload = {
+                model,
+                input: {
+                    text: input,
+                    voice: qwenVoice,
+                    language_type: detectQwenLanguageType(input)
+                }
+            };
+            let response;
+            try {
+                response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(qwenPayload),
+                    signal
+                });
+            } catch (err) {
+                throw new Error(formatNetworkFetchError(err, { endpoint: url }));
+            }
+            if (!response.ok) {
+                const errText = await response.text().catch(() => "");
+                throw new Error(formatQwenTtsHttpError({
+                    url,
+                    status: response.status,
+                    errText,
+                    model,
+                    voice: qwenVoice,
+                    isCustomVoice: needsCustomVoice
+                }));
+            }
+            return parseQwenSpeechResponse(response, cleanFormat);
+        }
+
+        async function requestCompatTtsSpeech({ endpoint, apiKey, model, voice, format, input, signal }) {
+            const isQwenCompat = isQwenTtsModel(model);
+            const voiceParam = String(voice || "").trim() || "alloy";
+            const styleInstruction = buildTtsStyleInstruction();
+            const cleanFormat = ["mp3", "wav", "opus", "aac", "flac", "pcm"].includes(String(format || "").toLowerCase()) ? String(format || "").toLowerCase() : "mp3";
+            const buildPayload = responseFormat => {
+                const payload = { model, voice: voiceParam, input, response_format: responseFormat };
+                if (!isQwenCompat) {
+                    payload.format = responseFormat;
+                    const streamFormat = String(config.ttsStreamFormat || DEFAULT_TTS_STREAM_FORMAT).toLowerCase();
+                    if (["audio", "sse"].includes(streamFormat)) payload.stream_format = streamFormat;
+                    const speed = parseFloat(config.ttsSpeed || DEFAULT_TTS_SPEED);
+                    if (Number.isFinite(speed) && Math.abs(speed - 1) > 0.01) payload.speed = Math.max(0.25, Math.min(4, speed));
+                    if (styleInstruction) payload.instructions = styleInstruction;
+                }
+                return payload;
+            };
+            const send = responseFormat => fetch(endpoint, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(buildPayload(responseFormat)),
+                signal
+            });
+
+            let response = await send(cleanFormat);
+            let failedText = "";
+            if (!response.ok && isQwenCompat && cleanFormat !== "mp3") {
+                failedText = await response.text().catch(() => "");
+                response = await send("mp3");
+                format = "mp3";
+            }
+
+            if (!response.ok) {
+                const errText = await response.text().catch(() => "") || failedText;
+                throw new Error(formatCompatTtsHttpError({
+                    status: response.status,
+                    errText,
+                    model,
+                    voice: voiceParam,
+                    endpoint
+                }));
+            }
+
+            const contentType = (response.headers.get("content-type") || "").toLowerCase();
+            if (contentType.startsWith("audio/") || contentType.includes("octet-stream")) {
+                const buffer = await response.arrayBuffer();
+                if (format === "pcm" || contentType.includes("audio/pcm")) {
+                    return { data: pcmBytesToWavDataUrl(new Uint8Array(buffer), 24000), mime: "audio/wav" };
+                }
+                const mime = contentType.split(";")[0] || getAudioMimeForFormat(format);
+                return { data: `data:${mime};base64,${arrayBufferToBase64(buffer)}`, mime };
+            }
+
+            if (contentType.includes("text/event-stream")) {
+                const text = await response.text();
+                const audioData = extractAudioFromSseText(text, format);
+                if (!audioData) throw new Error("语音 SSE 流未返回可解析音频");
+                return { data: audioData, mime: getAudioMimeForFormat(format) };
+            }
+
+            const data = await parseResponseAsJson(response);
+            const audioData = extractAudioFromApiResponse(data, format);
+            if (!audioData) throw new Error("语音接口未返回可解析音频");
+            return { data: audioData, mime: getAudioMimeForFormat(format) };
+        }
+
+        async function requestQwenVoiceDesign({ endpoint, apiKey, model, prompt, previewText, signal }) {
+            const url = getQwenVoiceDesignEndpoint(endpoint);
+            const body = {
+                model: "qwen-voice-design",
+                input: {
+                    action: "create",
+                    target_model: model,
+                    voice_prompt: prompt,
+                    preview_text: previewText,
+                    preferred_name: createQwenPreferredVoiceName(),
+                    language: detectQwenLanguageType(`${prompt}\n${previewText}`) === "Chinese" ? "zh" : "en"
+                },
+                parameters: {
+                    sample_rate: 24000,
+                    response_format: "wav"
+                }
+            };
+            let response;
+            try {
+                response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(body),
+                    signal
+                });
+            } catch (err) {
+                throw new Error(formatNetworkFetchError(err, { endpoint: url }));
+            }
+            const data = await parseResponseAsJson(response);
+            if (!response.ok) {
+                throw new Error(`音色设计失败：HTTP ${response.status}: ${JSON.stringify(data).substring(0, 240)}`);
+            }
+            const voiceId = extractQwenDesignedVoice(data);
+            if (!voiceId) throw new Error(`音色设计成功但未找到 voice ID：${JSON.stringify(data).substring(0, 240)}`);
+            return { voiceId, data };
+        }
+
+        async function requestQwenVoiceClone({ endpoint, apiKey, model, audioData, signal }) {
+            const url = getQwenVoiceDesignEndpoint(endpoint);
+            const body = {
+                model: "qwen-voice-enrollment",
+                input: {
+                    action: "create",
+                    target_model: model,
+                    preferred_name: createQwenPreferredVoiceName(),
+                    audio: {
+                        data: audioData
+                    }
+                }
+            };
+            let response;
+            try {
+                response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(body),
+                    signal
+                });
+            } catch (err) {
+                throw new Error(formatNetworkFetchError(err, { endpoint: url }));
+            }
+            const data = await parseResponseAsJson(response);
+            if (!response.ok) {
+                throw new Error(`音色克隆失败：HTTP ${response.status}: ${JSON.stringify(data).substring(0, 240)}`);
+            }
+            const voiceId = extractQwenDesignedVoice(data);
+            if (!voiceId) throw new Error(`音色克隆成功但未找到 voice ID：${JSON.stringify(data).substring(0, 240)}`);
+            return { voiceId, data };
+        }
+
         async function requestTextToSpeech({ endpoint, apiKey, model, voice, format, input, signal, relay = null }) {
             const styleInstruction = buildTtsStyleInstruction();
-            if (relay?.provider === "modec" || isVoiceModeCApiUrl(endpoint)) {
+            const effectiveProvider = getEffectiveVoiceProvider(relay, model);
+            if (effectiveProvider === "modec" || isVoiceModeCApiUrl(endpoint)) {
                 return requestVoiceModeCSpeech({ relay, model, voice, format, input, signal });
             }
-            if (isVoiceModeBApiUrl(endpoint)) {
+            if (effectiveProvider === "qwen") {
+                if (isDashScopeNativeTtsEndpoint(endpoint)) {
+                    return requestQwenTtsSpeech({ endpoint, apiKey, model, voice, format, input, signal });
+                }
+                return requestCompatTtsSpeech({ endpoint, apiKey, model, voice, format, input, signal });
+            }
+            if (effectiveProvider === "modeb") {
                 const base = normalizeVoiceModeBApiBaseUrl(endpoint);
                 const cleanModel = String(model || DEFAULT_TTS_MODEL).replace(/^models\//, "");
                 if (!isVoiceModeBTtsModel(cleanModel)) {
-                    throw new Error("当前选择的 语音模式 模型不是 TTS 模型，请选择 modeb-2.5-flash-preview-tts 或 modeb-2.5-pro-preview-tts");
+                    throw new Error("当前选择的 Gemini 模型不是 TTS 模型，请选择 gemini-3.1-flash-tts-preview、gemini-2.5-flash-preview-tts 或 gemini-2.5-pro-preview-tts");
                 }
-                const modebVoice = voice && voice !== DEFAULT_TTS_VOICE ? voice : "Kore";
+                const modebVoice = voice && voice !== DEFAULT_TTS_VOICE ? voice : "Sulafat";
                 const url = `${base}/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-                const transcript = String(input || "").trim();
                 const payload = {
-                    contents: [{ parts: [{ text: `${styleInstruction}\nRead the following transcript aloud exactly as written. Only generate audio, do not answer or add any text.\n\nTranscript:\n${transcript}`.trim() }] }],
+                    contents: [{ parts: [{ text: buildGeminiTtsPrompt(input, styleInstruction) }] }],
                     generationConfig: {
                         responseModalities: ["AUDIO"],
-                        speechConfig: {
-                            voiceConfig: {
-                                prebuiltVoiceConfig: { voiceName: modebVoice }
-                            }
-                        }
+                        speechConfig: buildGeminiSpeechConfig(modebVoice)
                     }
                 };
                 const response = await fetch(url, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
                     body: JSON.stringify(payload),
                     signal
                 });
                 const data = await parseResponseAsJson(response);
                 if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(data).substring(0, 220)}`);
                 const audio = extract语音模式AudioFromApiResponse(data);
-                if (!audio) throw new Error("语音模式 语音接口未返回可解析音频");
+                if (!audio) throw new Error("Gemini TTS 语音接口未返回可解析音频");
                 return audio;
             }
 
-            const payload = { model, voice, input, response_format: format, format };
-            const speed = parseFloat(config.ttsSpeed || DEFAULT_TTS_SPEED);
-            if (Number.isFinite(speed) && Math.abs(speed - 1) > 0.01) payload.speed = Math.max(0.25, Math.min(4, speed));
-            if (styleInstruction) payload.instructions = styleInstruction;
-            const response = await fetch(endpoint, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${apiKey}`
-                },
-                body: JSON.stringify(payload),
-                signal
-            });
-
-            if (!response.ok) {
-                const errText = await response.text().catch(() => "");
-                throw new Error(`HTTP ${response.status}: ${errText.substring(0, 220)}`);
-            }
-
-            const contentType = (response.headers.get("content-type") || "").toLowerCase();
-            if (contentType.startsWith("audio/") || contentType.includes("octet-stream")) {
-                const blob = await response.blob();
-                const dataUrl = await blobToDataUrl(blob);
-                return { data: dataUrl, mime: blob.type || "audio/mpeg" };
-            }
-
-            const data = await parseResponseAsJson(response);
-            const audioData = extractAudioFromApiResponse(data, format);
-            if (!audioData) throw new Error("语音接口未返回可解析音频");
-            return { data: audioData, mime: `audio/${format || "mpeg"}` };
+            return requestCompatTtsSpeech({ endpoint, apiKey, model, voice, format, input, signal });
         }
 
         async function generateSpeechByCurrentRelay(text, signal) {
             const relay = ensureVoiceRelayState(getActiveRelayByType("voice"));
             if (!relay) throw new Error("No available voice relay node found.");
-            if (!relay.apiKey) throw new Error(relay.provider==="modec" ? "当前 语音模式 节点缺少 Access Key ID" : "当前语音节点缺少 API Key");
+            const provider = getEffectiveVoiceProvider(relay);
+            if (!relay.apiKey) throw new Error(provider==="modec" ? "当前 语音模式 节点缺少 Access Key ID" : "当前语音节点缺少 API Key");
             const endpoint = getRelayVoiceSpeechApiUrl(relay);
             const model = relay.activeModelId || config.ttsModel || DEFAULT_TTS_MODEL;
-            const voiceOptions = relay.provider === "modec" ? VOICE_TTS_VOICES : relay.provider === "modeb" ? ALT_TTS_VOICES : COMPAT_TTS_VOICES;
-            const voiceFallback = relay.provider === "modec" ? "Zhiyu" : relay.provider === "modeb" ? "Kore" : DEFAULT_TTS_VOICE;
+            const effectiveProvider = getEffectiveVoiceProvider(relay, model);
+            const needsQwenCustomVoice = effectiveProvider === "qwen" && isQwenCustomVoiceTtsModel(model);
+            const voiceOptions = needsQwenCustomVoice ? [["", "使用自定义音色 ID"]] : effectiveProvider === "modec" ? VOICE_TTS_VOICES : effectiveProvider === "modeb" ? ALT_TTS_VOICES : effectiveProvider === "qwen" ? QWEN_TTS_VOICES : COMPAT_TTS_VOICES;
+            const voiceFallback = needsQwenCustomVoice ? "" : effectiveProvider === "modec" ? "Zhiyu" : effectiveProvider === "modeb" ? "Sulafat" : effectiveProvider === "qwen" ? "Cherry" : "alloy";
             const voice = voiceOptions.some(([value]) => value === config.ttsVoice) ? config.ttsVoice : voiceFallback;
             config.ttsVoice = voice;
             const format = (config.ttsFormat || DEFAULT_TTS_FORMAT).toLowerCase();
@@ -6770,7 +7533,11 @@ ${packLines}`;
             });
 
             const mime = String(result.mime || "").toLowerCase();
-            const ext = mime.includes("wav") ? "wav" : mime.includes("ogg") ? "ogg" : (format === "wav" ? "wav" : format === "ogg" ? "ogg" : "mp3");
+            const ext = mime.includes("wav") ? "wav"
+                : mime.includes("ogg") ? "ogg"
+                : mime.includes("aac") ? "aac"
+                : mime.includes("flac") ? "flac"
+                : (["wav", "ogg", "opus", "aac", "flac", "pcm"].includes(format) ? (format === "pcm" ? "wav" : format) : "mp3");
             return {
                 type: "audio",
                 name: `tts-${Date.now()}.${ext}`,
@@ -8422,6 +9189,7 @@ ${packLines}`;
                 populateSystemPromptGlobalSelect(config.activeSystemPromptId);
             }
             populateModelSelect(key);
+            if (key === "voice") syncQuickPanelParamsFromConfig();
             updateModelHint();
             syncEmojiPickerAvailability();
         }
@@ -8747,6 +9515,243 @@ ${packLines}`;
             if(currentPanel===panel)render(panel);
         }
 
+        async function handleQwenVoiceDesign(){
+            saveQuickVoiceParams();
+            const relay = ensureVoiceRelayState(getActiveRelayByType("voice"));
+            const model = relay?.activeModelId || config.ttsModel || "";
+            if (getEffectiveVoiceProvider(relay, model) !== "qwen" || !isQwenVoiceDesignTtsModel(model)) {
+                showToast("只有 Qwen VD 声音设计模型支持一键设计；VC 克隆模型需要上传参考音频生成音色", "warning");
+                return;
+            }
+            if (!relay?.apiKey) {
+                showToast("请先在设置里填写 DashScope API Key", "warning");
+                return;
+            }
+            const voicePrompt = String(config.ttsInstructions || "").trim();
+            if (!voicePrompt) {
+                showToast("先在“音色导演”里描述想要的声音", "warning");
+                quickTtsInstructionsInput?.focus();
+                return;
+            }
+            const previewText = getComposedInputText() || "早上好呀，今天想先做哪件事？我可以陪你整理计划，也可以先和你聊几分钟。";
+            const controller = new AbortController();
+            try {
+                if (quickTtsDesignVoiceBtn) {
+                    quickTtsDesignVoiceBtn.disabled = true;
+                    quickTtsDesignVoiceBtn.textContent = "设计中...";
+                }
+                showToast("正在设计音色...");
+                const endpoint = getRelayVoiceSpeechApiUrl(relay);
+                const result = await requestQwenVoiceDesign({
+                    endpoint,
+                    apiKey: relay.apiKey,
+                    model,
+                    prompt: voicePrompt,
+                    previewText,
+                    signal: controller.signal
+                });
+                config.ttsCustomVoiceId = result.voiceId;
+                if (quickTtsCustomVoiceInput) quickTtsCustomVoiceInput.value = result.voiceId;
+                const defaultName = `设计音色${(config.savedTtsVoices || []).length + 1}`;
+                const customName = prompt("音色设计成功，给它起个名字", defaultName);
+                const saved = upsertSavedTtsVoice({
+                    id: result.voiceId,
+                    name: customName === null ? defaultName : (String(customName || "").trim() || defaultName),
+                    model,
+                    description: voicePrompt,
+                    select: true
+                });
+                persistConfig();
+                updateModelHint();
+                showToast(`音色已设计并自动保存：${saved?.name || "新音色"}`);
+            } catch (err) {
+                showToast(`音色设计失败: ${err.message}`, "error");
+            } finally {
+                if (quickTtsDesignVoiceBtn) {
+                    quickTtsDesignVoiceBtn.disabled = false;
+                    quickTtsDesignVoiceBtn.textContent = "一键设计";
+                }
+            }
+        }
+
+        async function handleQwenVoiceClone(){
+            saveQuickVoiceParams();
+            const relay = ensureVoiceRelayState(getActiveRelayByType("voice"));
+            const model = relay?.activeModelId || config.ttsModel || "";
+            if (getEffectiveVoiceProvider(relay, model) !== "qwen" || !isQwenVoiceCloneTtsModel(model)) {
+                showToast("只有 Qwen VC 克隆模型支持一键克隆；VD 设计模型请用一键设计", "warning");
+                return;
+            }
+            if (!relay?.apiKey) {
+                showToast("请先在设置里填写 DashScope API Key", "warning");
+                return;
+            }
+            if (isQwenRealtimeTtsModel(model) && !confirm("当前是 realtime VC 模型。它可以创建音色，但本网页的合成按钮暂不支持 realtime WebSocket 合成。建议取消后切换到 qwen3-tts-vc-2026-01-22。仍继续克隆？")) {
+                return;
+            }
+            const file = quickTtsCloneFileInput?.files?.[0];
+            if (!file) {
+                showToast("请先选择一段参考音频", "warning");
+                quickTtsCloneFileInput?.focus();
+                return;
+            }
+            if (file.size > 10 * 1024 * 1024) {
+                showToast("参考音频编码后不能超过 10MB，请换一段更短的录音", "warning");
+                return;
+            }
+            const controller = new AbortController();
+            try {
+                if (quickTtsCloneVoiceBtn) {
+                    quickTtsCloneVoiceBtn.disabled = true;
+                    quickTtsCloneVoiceBtn.textContent = "克隆中...";
+                }
+                showToast("正在克隆音色...");
+                const endpoint = getRelayVoiceSpeechApiUrl(relay);
+                const audioData = await fileToDataUrl(file);
+                if (audioData.length > 10 * 1024 * 1024) {
+                    throw new Error("参考音频编码后超过 10MB，请换一段更短的录音");
+                }
+                const result = await requestQwenVoiceClone({
+                    endpoint,
+                    apiKey: relay.apiKey,
+                    model,
+                    audioData,
+                    signal: controller.signal
+                });
+                config.ttsCustomVoiceId = result.voiceId;
+                if (quickTtsCustomVoiceInput) quickTtsCustomVoiceInput.value = result.voiceId;
+                const defaultName = `克隆音色${(config.savedTtsVoices || []).length + 1}`;
+                const customName = prompt("音色克隆成功，给它起个名字", defaultName);
+                const saved = upsertSavedTtsVoice({
+                    id: result.voiceId,
+                    name: customName === null ? defaultName : (String(customName || "").trim() || defaultName),
+                    model,
+                    description: `参考音频：${file.name}`,
+                    select: true
+                });
+                persistConfig();
+                updateModelHint();
+                showToast(`音色已克隆并自动保存：${saved?.name || "新音色"}`);
+            } catch (err) {
+                showToast(`音色克隆失败: ${err.message}`, "error");
+            } finally {
+                if (quickTtsCloneVoiceBtn) {
+                    quickTtsCloneVoiceBtn.disabled = false;
+                    quickTtsCloneVoiceBtn.textContent = "一键克隆";
+                }
+            }
+        }
+
+        function saveCurrentTtsVoiceToLibrary(){
+            saveQuickVoiceParams();
+            const voiceId = String(config.ttsCustomVoiceId || "").trim();
+            if (!voiceId) {
+                showToast("没有可保存的自定义音色 ID", "warning");
+                quickTtsCustomVoiceInput?.focus();
+                return;
+            }
+            const relay = ensureVoiceRelayState(getActiveRelayByType("voice"));
+            const model = getVoiceActiveModelId(relay);
+            const suggested = `音色${(config.savedTtsVoices || []).length + 1}`;
+            const name = prompt("给这个音色起个名字", suggested);
+            if (name === null) return;
+            const cleanName = String(name || "").trim() || suggested;
+            upsertSavedTtsVoice({
+                id: voiceId,
+                name: cleanName,
+                model,
+                description: config.ttsInstructions || "",
+                select: true
+            });
+            persistConfig();
+            showToast(`已保存音色：${cleanName}`);
+        }
+
+        function applySavedTtsVoice(){
+            const relay = ensureVoiceRelayState(getActiveRelayByType("voice"));
+            const provider = getEffectiveVoiceProvider(relay);
+            const model = getVoiceActiveModelId(relay);
+            if (provider !== "qwen" || !isQwenCustomVoiceTtsModel(model)) {
+                if (quickTtsVoiceLibrarySelect) quickTtsVoiceLibrarySelect.value = "";
+                showToast("音色库只用于 Qwen VC/VD 自定义音色；OpenAI 请直接选内置音色", "warning");
+                return;
+            }
+            const voiceId = String(quickTtsVoiceLibrarySelect?.value || "").trim();
+            if (!voiceId) {
+                return;
+            }
+            const item = (config.savedTtsVoices || []).find(v => v.id === voiceId);
+            config.ttsCustomVoiceId = voiceId;
+            if (quickTtsCustomVoiceInput) quickTtsCustomVoiceInput.value = voiceId;
+            persistConfig();
+            updateModelHint();
+            showToast(`已使用音色：${item?.name || voiceId}`);
+        }
+
+        function deleteSavedTtsVoice(){
+            const voiceId = String(quickTtsVoiceLibrarySelect?.value || "").trim();
+            if (!voiceId) {
+                showToast("请先选择要删除的音色", "warning");
+                return;
+            }
+            const item = (config.savedTtsVoices || []).find(v => v.id === voiceId);
+            if (!confirm(`删除保存的音色“${item?.name || voiceId}”？`)) return;
+            config.savedTtsVoices = normalizeSavedTtsVoices((config.savedTtsVoices || []).filter(v => v.id !== voiceId));
+            persistConfig();
+            renderSavedTtsVoiceLibrary();
+            showToast("已删除保存音色");
+        }
+
+        function exportSavedTtsVoices(){
+            config.savedTtsVoices = normalizeSavedTtsVoices(config.savedTtsVoices);
+            if (!config.savedTtsVoices.length) {
+                showToast("还没有可导出的音色", "warning");
+                return;
+            }
+            const payload = {
+                app: "AI Cognitive Engine",
+                type: "tts-voice-library",
+                version: 1,
+                exportedAt: new Date().toISOString(),
+                voices: config.savedTtsVoices
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `tts-voice-library-${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            showToast("音色库已导出");
+        }
+
+        function triggerImportSavedTtsVoices(){
+            quickTtsVoiceLibraryFile?.click();
+        }
+
+        async function importSavedTtsVoicesFromFile(file){
+            if (!file) return;
+            let data;
+            try {
+                data = JSON.parse(await file.text());
+            } catch (err) {
+                showToast(`音色库导入失败: ${err.message}`, "error");
+                return;
+            }
+            const incoming = normalizeSavedTtsVoices(Array.isArray(data) ? data : data?.voices);
+            if (!incoming.length) {
+                showToast("文件里没有可导入的音色", "warning");
+                return;
+            }
+            const existing = normalizeSavedTtsVoices(config.savedTtsVoices);
+            config.savedTtsVoices = normalizeSavedTtsVoices([...incoming, ...existing]);
+            persistConfig();
+            renderSavedTtsVoiceLibrary();
+            showToast(`已导入 ${incoming.length} 个音色`);
+        }
+
         async function handleSend(){
             if(isPanelRunning(currentPanel)){stopPanelTask(currentPanel);return;}
             const text=getComposedInputText();
@@ -8932,7 +9937,7 @@ ${packLines}`;
             try{
                 const ctx=getFetchModelsContext(type);
                 if(!ctx || !ctx.relay)throw new Error(`No available ${type} relay node.`);
-                if(type==="voice" && ctx.relay.provider==="modec"){
+                if(type==="voice" && getEffectiveVoiceProvider(ctx.relay)==="modec"){
                     const models=VOICE_TTS_ENGINES.map(item=>item.id);
                     if(requestToken!==modelFetchTokenMap[type])return;
                     ctx.relay.fetchedModels=models;
@@ -8961,7 +9966,7 @@ ${packLines}`;
                     .map(m=>String(m.name||m.id||'').replace(/^models\//,''))
                     .filter(id=>type!=="voice" || isVoiceModeBTtsModel(id))
                     .filter(Boolean);
-                else if(type==="voice" && ctx.relay.provider==="modec")models=VOICE_TTS_ENGINES.map(item=>item.id);
+                else if(type==="voice" && getEffectiveVoiceProvider(ctx.relay)==="modec")models=VOICE_TTS_ENGINES.map(item=>item.id);
                 else if(data?.data&&Array.isArray(data.data))models=data.data.map(m=>m.id||m.name||'').filter(Boolean);
                 else if(Array.isArray(data))models=data.map(m=>typeof m==='string'?m:m.id||m.name||'').filter(Boolean);
                 models=normalizeFetchedModels(models);
@@ -9902,7 +10907,17 @@ ${packLines}`;
         }
 
         function getVoiceProviderDefaults(provider, region = "") {
-            return { apiUrl: "", model: "", voice: "" };
+            if (provider === "modeb") {
+                return {
+                    apiUrl: "https://generativelanguage.googleapis.com/v1beta",
+                    model: DEFAULT_TTS_MODEL,
+                    voice: "Sulafat"
+                };
+            }
+            if (provider === "modec") {
+                return { apiUrl: normalizeVoiceModeCApiUrl(region), model: "", voice: "Zhiyu" };
+            }
+            return { apiUrl: "", model: DEFAULT_COMPAT_TTS_MODEL, voice: "alloy" };
         }
 
         function updateVoiceProviderFieldVisibility(provider) {
@@ -9919,6 +10934,20 @@ ${packLines}`;
         function handleVoiceProviderInputChange() {
             const ids = getSettingsRelayFieldIds("voice");
             const provider = document.getElementById(ids.provider)?.value || "compat";
+            if (provider === "auto") {
+                const relay = getVoiceRelayById(getSettingsEditingRelayId("voice"));
+                if (relay) {
+                    relay.provider = "auto";
+                    ensureVoiceRelayState(relay);
+                    if (currentPanel === "voice") {
+                        populateModelSelect("voice");
+                        syncQuickPanelParamsFromConfig();
+                    }
+                }
+                updateVoiceProviderFieldVisibility("auto");
+                scheduleSettingsAutoSave(80);
+                return;
+            }
             const regionInput = document.getElementById(ids.region);
             const region = regionInput?.value || "";
             const defaults = getVoiceProviderDefaults(provider, region);
@@ -9978,16 +11007,17 @@ ${packLines}`;
             relay.apiKey = apiKeyInput.value.trim();
             if(type==="chat" && disableStreamInput) relay.disableStream = !!disableStreamInput.checked;
             if(type==="voice"){
-                if(providerSelect) relay.provider = String(providerSelect.value || "").trim().toLowerCase();
+                relay.provider = "auto";
                 if(regionInput) relay.region = regionInput.value.trim() || relay.region || "";
                 if(secretKeyInput) relay.secretKey = secretKeyInput.value.trim();
                 if(sessionTokenInput) relay.sessionToken = sessionTokenInput.value.trim();
-                if(relay.provider==="modec"){
+                if(getEffectiveVoiceProvider(relay)==="modec"){
                     relay.apiUrl = normalizeVoiceModeCApiUrl(relay.region);
                 }
                 ensureVoiceRelayState(relay);
-                const voiceOptions = relay.provider === "modec" ? VOICE_TTS_VOICES : relay.provider === "modeb" ? ALT_TTS_VOICES : COMPAT_TTS_VOICES;
-                const voiceFallback = relay.provider === "modec" ? "Zhiyu" : relay.provider === "modeb" ? "Kore" : DEFAULT_TTS_VOICE;
+                const effectiveProvider = getEffectiveVoiceProvider(relay);
+                const voiceOptions = effectiveProvider === "modec" ? VOICE_TTS_VOICES : effectiveProvider === "modeb" ? ALT_TTS_VOICES : effectiveProvider === "qwen" ? QWEN_TTS_VOICES : COMPAT_TTS_VOICES;
+                const voiceFallback = effectiveProvider === "modec" ? "Zhiyu" : effectiveProvider === "modeb" ? "Sulafat" : effectiveProvider === "qwen" ? "Cherry" : "alloy";
                 if (!voiceOptions.some(([value]) => value === config.ttsVoice)) config.ttsVoice = voiceFallback;
             }
             if(type==="video"){
@@ -10041,12 +11071,12 @@ ${packLines}`;
                 providerSelect.value=["generic","vmodeb","vmodec","vmoded"].includes(p)?p:"generic";
             }
             if(providerSelect && type==="voice"){
-                const p=String(relay.provider||"compat").toLowerCase();
-                providerSelect.value=["compat","modeb","modec"].includes(p)?p:"compat";
+                const p=String(relay.provider||"auto").toLowerCase();
+                providerSelect.value=["auto","compat","modeb","modec"].includes(p)?p:"auto";
                 if(regionInput) regionInput.value = relay.region || "";
                 if(secretKeyInput) secretKeyInput.value = relay.secretKey || "";
                 if(sessionTokenInput) sessionTokenInput.value = relay.sessionToken || "";
-                updateVoiceProviderFieldVisibility(providerSelect.value);
+                updateVoiceProviderFieldVisibility("auto");
             }
         }
 
@@ -10352,9 +11382,16 @@ ${packLines}`;
                 ttsModel:DEFAULT_TTS_MODEL,
                 ttsVoice:DEFAULT_TTS_VOICE,
                 ttsFormat:DEFAULT_TTS_FORMAT,
+                ttsStreamFormat:DEFAULT_TTS_STREAM_FORMAT,
+                ttsCustomVoiceId:DEFAULT_TTS_CUSTOM_VOICE_ID,
+                savedTtsVoices:JSON.parse(JSON.stringify(DEFAULT_SAVED_TTS_VOICES)),
                 ttsSpeed:DEFAULT_TTS_SPEED,
                 ttsTone:DEFAULT_TTS_TONE,
                 ttsAccent:DEFAULT_TTS_ACCENT,
+                ttsSpeakerMode:DEFAULT_TTS_SPEAKER_MODE,
+                ttsSpeakerName:DEFAULT_TTS_SPEAKER_NAME,
+                ttsSecondSpeakerName:DEFAULT_TTS_SECOND_SPEAKER_NAME,
+                ttsSecondVoice:DEFAULT_TTS_SECOND_VOICE,
                 ttsInstructions:DEFAULT_TTS_INSTRUCTIONS,
                 videoDuration:5,
                 videoAspectRatio:"16:9",
@@ -10420,10 +11457,20 @@ ${packLines}`;
         initDraggableSessionFab();
         relaySelect.addEventListener("change",()=>{switchRelayById(relaySelect.value);});
         quickTtsVoiceInput?.addEventListener("change", saveQuickVoiceParams);
+        quickTtsCustomVoiceInput?.addEventListener("change", saveQuickVoiceParams);
+        quickTtsVoiceLibrarySelect?.addEventListener("change", applySavedTtsVoice);
+        quickTtsVoiceLibraryFile?.addEventListener("change", e=>{
+            const file=e.target.files?.[0];
+            importSavedTtsVoicesFromFile(file).finally(()=>{ if(quickTtsVoiceLibraryFile) quickTtsVoiceLibraryFile.value=""; });
+        });
+        quickTtsSpeakerModeSelect?.addEventListener("change", saveQuickVoiceParams);
+        quickTtsSecondVoiceSelect?.addEventListener("change", saveQuickVoiceParams);
         quickTtsToneSelect?.addEventListener("change", saveQuickVoiceParams);
         quickTtsSpeedInput?.addEventListener("input", saveQuickVoiceParams);
         quickTtsAccentSelect?.addEventListener("change", saveQuickVoiceParams);
         quickTtsFormatSelect?.addEventListener("change", saveQuickVoiceParams);
+        quickTtsStreamFormatSelect?.addEventListener("change", saveQuickVoiceParams);
+        quickTtsSpeakersInput?.addEventListener("change", saveQuickVoiceParams);
         quickTtsInstructionsInput?.addEventListener("change", saveQuickVoiceParams);
         quickVideoDurationInput?.addEventListener("change", saveQuickVideoParams);
         quickVideoAspectSelect?.addEventListener("change", saveQuickVideoParams);
@@ -10461,6 +11508,7 @@ ${packLines}`;
                     persistConfig();
                     persistPanelSessions("voice");
                 }
+                syncQuickPanelParamsFromConfig();
                 updateModelHint();
                 const m=(relay?.selectedModels||[]).find(m=>m.id===modelSelect.value);
                 showToast(`🔊 已切换语音模型：${m?(m.name||m.id):modelSelect.value}`);
