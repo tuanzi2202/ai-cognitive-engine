@@ -3581,6 +3581,10 @@
             return false;
         }
 
+        function isOpenRouterApiUrl(url = "") {
+            return /openrouter\.ai\/api\/v1/i.test(String(url || ""));
+        }
+
         function normalizeVoiceModeCApiUrl(region = "") {
             return "";
         }
@@ -3593,6 +3597,8 @@
         function isGeminiTtsModel(model = "") {
             const m = String(model || "").toLowerCase().replace(/^models\//, "");
             return /^gemini[-_.].*tts/.test(m)
+                || /(^|[/_-])gemini[-_.].*tts/.test(m)
+                || /^google[\/-_.].*gemini.*tts/.test(m)
                 || /^chirp/.test(m)
                 || /^sonic/.test(m)
                 || /^google[-_.].*tts/.test(m);
@@ -3603,6 +3609,14 @@
             return /^gpt[-_.].*tts/.test(m)
                 || /^tts[-_.]/.test(m)
                 || /^openai[-_.].*tts/.test(m);
+        }
+
+        function isVoxtralTtsModel(model = "") {
+            return /(^|[/_-])voxtral.*tts|tts.*voxtral/i.test(String(model || "").replace(/^models\//, ""));
+        }
+
+        function containsChineseText(text = "") {
+            return /[\u4E00-\u9FFF]/.test(String(text || ""));
         }
 
         function isQwenTtsModel(model = "") {
@@ -4027,6 +4041,15 @@
                 base = base.replace(/\/chat\/completions\/?$/i, "");
             }
             return normalizeV1BaseUrl(base, DEFAULT_API_URL);
+        }
+
+        function buildModelsListUrl(base, type = "chat") {
+            const cleanBase = String(base || "").trim().replace(/\/+$/, "");
+            const url = `${cleanBase}/models`;
+            if (type === "voice" && isOpenRouterApiUrl(cleanBase)) {
+                return `${url}?output_modalities=speech`;
+            }
+            return url;
         }
 
         function getFetchModelsContext(type = "chat") {
@@ -5190,10 +5213,12 @@
             const provider = getEffectiveVoiceProvider(normalizedRelay);
             const activeModel = getVoiceActiveModelId(normalizedRelay);
             const isQwenCustomVoice = provider === "qwen" && isQwenCustomVoiceTtsModel(activeModel);
+            const isVoxtral = isVoxtralTtsModel(activeModel);
             const voices = isQwenCustomVoice
                 ? [["", "使用自定义音色 ID"]]
+                : isVoxtral ? [["", "填写 Mistral voice_id"]]
                 : provider === "modec" ? VOICE_TTS_VOICES : provider === "modeb" ? ALT_TTS_VOICES : provider === "qwen" ? QWEN_TTS_VOICES : COMPAT_TTS_VOICES;
-            const fallback = isQwenCustomVoice ? "" : provider === "modec" ? "Zhiyu" : provider === "modeb" ? "Sulafat" : provider === "qwen" ? "Cherry" : "alloy";
+            const fallback = (isQwenCustomVoice || isVoxtral) ? "" : provider === "modec" ? "Zhiyu" : provider === "modeb" ? "Sulafat" : provider === "qwen" ? "Cherry" : "alloy";
             let current = config.ttsVoice || fallback;
             if (!voices.some(([value]) => value === current)) {
                 current = fallback;
@@ -5231,7 +5256,10 @@
             const isGemini = provider === "modeb";
             const isCompat = provider === "compat";
             const isQwen = provider === "qwen";
-            const activeVoiceModel = getVoiceActiveModelId(ensureVoiceRelayState(getActiveRelayByType("voice")));
+            const activeVoiceRelay = ensureVoiceRelayState(getActiveRelayByType("voice"));
+            const activeVoiceModel = getVoiceActiveModelId(activeVoiceRelay);
+            const isOpenRouterVoice = isOpenRouterApiUrl(activeVoiceRelay?.apiUrl);
+            const isVoxtral = isVoxtralTtsModel(activeVoiceModel);
             const isQwenCustomVoice = isQwen && isQwenCustomVoiceTtsModel(activeVoiceModel);
             const isQwenVoiceDesign = isQwen && isQwenVoiceDesignTtsModel(activeVoiceModel);
             const isQwenVoiceClone = isQwen && isQwenVoiceCloneTtsModel(activeVoiceModel);
@@ -5244,20 +5272,32 @@
             });
             if (quickTtsVoiceInput?.parentElement) quickTtsVoiceInput.parentElement.style.display = isQwenCustomVoice ? "none" : "";
             if (quickTtsCustomVoiceInput?.parentElement) {
-                quickTtsCustomVoiceInput.parentElement.style.display = isQwenCustomVoice ? "" : "none";
-                quickTtsCustomVoiceInput.placeholder = isQwenVoiceClone ? "克隆后自动填入，或粘贴已有 VC 音色 ID" : isQwenVoiceDesign ? "设计后自动填入，或粘贴已有 VD 音色 ID" : "voice_... 可选";
+                quickTtsCustomVoiceInput.parentElement.style.display = (isQwenCustomVoice || isVoxtral) ? "" : "none";
+                quickTtsCustomVoiceInput.placeholder = isVoxtral ? "Mistral voice_id 必填" : isQwenVoiceClone ? "克隆后自动填入，或粘贴已有 VC 音色 ID" : isQwenVoiceDesign ? "设计后自动填入，或粘贴已有 VD 音色 ID" : "voice_... 可选";
             }
             if (quickTtsDesignVoiceBtn) quickTtsDesignVoiceBtn.style.display = isQwenVoiceDesign ? "" : "none";
             if (quickTtsCloneVoiceBtn) quickTtsCloneVoiceBtn.style.display = isQwenVoiceClone ? "" : "none";
             if (quickTtsCloneFileGroup) quickTtsCloneFileGroup.style.display = isQwenVoiceClone ? "" : "none";
-            if (quickTtsSaveVoiceBtn) quickTtsSaveVoiceBtn.style.display = isQwenCustomVoice ? "" : "none";
-            if (quickTtsVoiceLibraryGroup) quickTtsVoiceLibraryGroup.style.display = isQwenCustomVoice ? "" : "none";
+            if (quickTtsSaveVoiceBtn) quickTtsSaveVoiceBtn.style.display = (isQwenCustomVoice || isVoxtral) ? "" : "none";
+            if (quickTtsVoiceLibraryGroup) quickTtsVoiceLibraryGroup.style.display = (isQwenCustomVoice || isVoxtral) ? "" : "none";
             if (quickTtsFormatSelect?.parentElement) quickTtsFormatSelect.parentElement.style.display = isGemini ? "none" : "";
             if (quickTtsToneSelect?.parentElement) quickTtsToneSelect.parentElement.style.display = isQwenCustomVoice ? "none" : "";
             if (quickTtsSpeedInput?.parentElement) quickTtsSpeedInput.parentElement.style.display = isQwenCustomVoice ? "none" : "";
             if (quickTtsAccentSelect?.parentElement) quickTtsAccentSelect.parentElement.style.display = (isGemini || isQwenCustomVoice) ? "none" : "";
             if (quickTtsInstructionsInput?.parentElement) quickTtsInstructionsInput.parentElement.style.display = (isQwenFlash || isQwenVoiceClone) ? "none" : "";
             if (isQwen && quickTtsFormatSelect && !["mp3", "wav"].includes(quickTtsFormatSelect.value)) quickTtsFormatSelect.value = "mp3";
+            if (quickTtsFormatSelect) {
+                const allowedFormats = isOpenRouterVoice ? ["mp3", "pcm"] : (isQwen ? ["mp3", "wav"] : ["mp3", "opus", "aac", "flac", "wav", "pcm", "ogg"]);
+                Array.from(quickTtsFormatSelect.options).forEach(option => {
+                    const allowed = allowedFormats.includes(option.value);
+                    option.disabled = !allowed;
+                    option.hidden = !allowed;
+                });
+                if (!allowedFormats.includes(quickTtsFormatSelect.value)) {
+                    quickTtsFormatSelect.value = allowedFormats[0];
+                    config.ttsFormat = allowedFormats[0];
+                }
+            }
             if (quickTtsSecondVoiceSelect) {
                 quickTtsSecondVoiceSelect.parentElement.style.display = isGemini && config.ttsSpeakerMode === "multi" ? "" : "none";
             }
@@ -6104,6 +6144,12 @@ ${packLines}`;
             return "audio/mpeg";
         }
 
+        function normalizeTtsResponseFormatForEndpoint(format = "mp3", endpoint = "") {
+            const fmt = String(format || "mp3").toLowerCase();
+            if (isOpenRouterApiUrl(endpoint)) return ["mp3", "pcm"].includes(fmt) ? fmt : "mp3";
+            return ["mp3", "opus", "aac", "flac", "wav", "pcm", "ogg"].includes(fmt) ? fmt : "mp3";
+        }
+
         function normalizeSavedTtsVoices(items) {
             const list = Array.isArray(items) ? items : [];
             const seen = new Set();
@@ -6303,6 +6349,10 @@ ${packLines}`;
                 if (isQwenTtsModel(model)) {
                     hints.push("qwen3-tts-flash 建议切到阿里云官方 DashScope 节点/本地 8787 代理使用；或者换成该中转明确支持的 OpenAI TTS 模型。");
                 }
+            }
+            if (status === 403 && /Terms Of Service|prohibited|violation/i.test(message)) {
+                hints.push("上游 provider 拒绝了这段文本，通常是内容安全/服务条款过滤，不是 API Key 或接口地址错误。");
+                hints.push("请先用中性短句测试，例如“你好，今天我们来测试语音合成。”；若仍失败，再换 OpenAI TTS 或官方 Google/Gemini 节点。");
             }
             return [
                 `HTTP ${status}${code ? ` ${code}` : ""}${message ? `: ${message}` : ""}`,
@@ -7321,12 +7371,20 @@ ${packLines}`;
 
         async function requestCompatTtsSpeech({ endpoint, apiKey, model, voice, format, input, signal }) {
             const isQwenCompat = isQwenTtsModel(model);
-            const voiceParam = String(voice || "").trim() || "alloy";
+            const isVoxtral = isVoxtralTtsModel(model);
+            const isOpenRouterEndpoint = isOpenRouterApiUrl(endpoint);
+            if (isVoxtral && containsChineseText(input)) {
+                throw new Error("Voxtral TTS 暂不支持中文文本。请改用英文/法语/西语等支持语言，或换成支持中文的 TTS 模型，例如 gpt-4o-mini-tts、qwen3-tts-flash、Gemini TTS。");
+            }
+            const voiceParam = isVoxtral ? String(config.ttsCustomVoiceId || "").trim() : (String(voice || "").trim() || "alloy");
+            if (isVoxtral && !voiceParam) {
+                throw new Error("Voxtral TTS 需要 Mistral 保存音色的 voice_id；OpenRouter 目前没有给这个模型提供可直接选用的预设音色。没有 voice_id 的话，请改用 gpt-4o-mini-tts 或支持中文/预设音色的其他 TTS。");
+            }
             const styleInstruction = buildTtsStyleInstruction();
-            const cleanFormat = ["mp3", "wav", "opus", "aac", "flac", "pcm"].includes(String(format || "").toLowerCase()) ? String(format || "").toLowerCase() : "mp3";
+            const cleanFormat = normalizeTtsResponseFormatForEndpoint(format, endpoint);
             const buildPayload = responseFormat => {
                 const payload = { model, voice: voiceParam, input, response_format: responseFormat };
-                if (!isQwenCompat) {
+                if (!isQwenCompat && !isOpenRouterEndpoint) {
                     payload.format = responseFormat;
                     const streamFormat = String(config.ttsStreamFormat || DEFAULT_TTS_STREAM_FORMAT).toLowerCase();
                     if (["audio", "sse"].includes(streamFormat)) payload.stream_format = streamFormat;
@@ -7467,6 +7525,9 @@ ${packLines}`;
         async function requestTextToSpeech({ endpoint, apiKey, model, voice, format, input, signal, relay = null }) {
             const styleInstruction = buildTtsStyleInstruction();
             const effectiveProvider = getEffectiveVoiceProvider(relay, model);
+            if (isOpenRouterApiUrl(endpoint)) {
+                return requestCompatTtsSpeech({ endpoint, apiKey, model, voice, format, input, signal });
+            }
             if (effectiveProvider === "modec" || isVoiceModeCApiUrl(endpoint)) {
                 return requestVoiceModeCSpeech({ relay, model, voice, format, input, signal });
             }
@@ -7516,11 +7577,13 @@ ${packLines}`;
             const model = relay.activeModelId || config.ttsModel || DEFAULT_TTS_MODEL;
             const effectiveProvider = getEffectiveVoiceProvider(relay, model);
             const needsQwenCustomVoice = effectiveProvider === "qwen" && isQwenCustomVoiceTtsModel(model);
-            const voiceOptions = needsQwenCustomVoice ? [["", "使用自定义音色 ID"]] : effectiveProvider === "modec" ? VOICE_TTS_VOICES : effectiveProvider === "modeb" ? ALT_TTS_VOICES : effectiveProvider === "qwen" ? QWEN_TTS_VOICES : COMPAT_TTS_VOICES;
-            const voiceFallback = needsQwenCustomVoice ? "" : effectiveProvider === "modec" ? "Zhiyu" : effectiveProvider === "modeb" ? "Sulafat" : effectiveProvider === "qwen" ? "Cherry" : "alloy";
+            const isVoxtral = isVoxtralTtsModel(model);
+            const voiceOptions = needsQwenCustomVoice ? [["", "使用自定义音色 ID"]] : isVoxtral ? [["", "填写 Mistral voice_id"]] : effectiveProvider === "modec" ? VOICE_TTS_VOICES : effectiveProvider === "modeb" ? ALT_TTS_VOICES : effectiveProvider === "qwen" ? QWEN_TTS_VOICES : COMPAT_TTS_VOICES;
+            const voiceFallback = (needsQwenCustomVoice || isVoxtral) ? "" : effectiveProvider === "modec" ? "Zhiyu" : effectiveProvider === "modeb" ? "Sulafat" : effectiveProvider === "qwen" ? "Cherry" : "alloy";
             const voice = voiceOptions.some(([value]) => value === config.ttsVoice) ? config.ttsVoice : voiceFallback;
             config.ttsVoice = voice;
-            const format = (config.ttsFormat || DEFAULT_TTS_FORMAT).toLowerCase();
+            const format = normalizeTtsResponseFormatForEndpoint(config.ttsFormat || DEFAULT_TTS_FORMAT, endpoint);
+            config.ttsFormat = format;
             const result = await requestTextToSpeech({
                 endpoint,
                 apiKey: relay.apiKey,
@@ -9671,9 +9734,9 @@ ${packLines}`;
             const relay = ensureVoiceRelayState(getActiveRelayByType("voice"));
             const provider = getEffectiveVoiceProvider(relay);
             const model = getVoiceActiveModelId(relay);
-            if (provider !== "qwen" || !isQwenCustomVoiceTtsModel(model)) {
+            if (!((provider === "qwen" && isQwenCustomVoiceTtsModel(model)) || isVoxtralTtsModel(model))) {
                 if (quickTtsVoiceLibrarySelect) quickTtsVoiceLibrarySelect.value = "";
-                showToast("音色库只用于 Qwen VC/VD 自定义音色；OpenAI 请直接选内置音色", "warning");
+                showToast("音色库只用于 Qwen VC/VD 或 Voxtral voice_id；OpenAI 请直接选内置音色", "warning");
                 return;
             }
             const voiceId = String(quickTtsVoiceLibrarySelect?.value || "").trim();
@@ -9956,7 +10019,7 @@ ${packLines}`;
                 const base=getModelsApiBaseUrl(ctx.apiUrl, type);
                 if(!base)throw new Error(`Current ${type} relay is missing API URL`);
                 const is语音模式=isVoiceModeBApiUrl(base);
-                const modelsUrl=is语音模式 ? `${base}/models?key=${encodeURIComponent(ctx.apiKey)}` : `${base}/models`;
+                const modelsUrl=is语音模式 ? `${base}/models?key=${encodeURIComponent(ctx.apiKey)}` : buildModelsListUrl(base, type);
                 const r=await fetch(modelsUrl,is语音模式?{}:{headers:{"Authorization":`Bearer ${ctx.apiKey}`}});
                 if(!r.ok)throw new Error(`HTTP ${r.status}`);
                 const data=await r.json();
