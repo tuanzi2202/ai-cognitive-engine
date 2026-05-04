@@ -23,17 +23,57 @@
         if(!window.marked){
             var markedOptions={renderer:null};
             function Renderer(){}
-            function inline(src){
+            function safeLinkUrl(url){
+                var safeUrl=String(url||"").trim();
+                if(!/^(?:[a-z][a-z0-9+.-]*:|#|\/)/i.test(safeUrl)) safeUrl="#";
+                return safeUrl;
+            }
+            function parseImageTarget(value){
+                var raw=String(value||"").trim();
+                var title="";
+                var titleMatch=raw.match(/^(.+?)\s+["']([^"']*)["']\s*$/);
+                if(titleMatch){ raw=titleMatch[1].trim(); title=titleMatch[2].trim(); }
+                if(raw.charAt(0)==="<"&&raw.charAt(raw.length-1)===">")raw=raw.slice(1,-1).trim();
+                return {href:raw,title:title};
+            }
+            function safeImageUrl(url){
+                var raw=String(url||"").trim();
+                if(!raw)return "";
+                if(/^data:image\/(?:png|jpe?g|gif|webp|bmp|avif);base64,/i.test(raw))return raw.replace(/\s+/g,"");
+                try{
+                    var parsed=new URL(raw,window.location.href);
+                    if(parsed.protocol==="http:"||parsed.protocol==="https:"||(parsed.protocol==="file:"&&window.location.protocol==="file:")||parsed.protocol==="blob:")return parsed.href;
+                }catch(e){}
+                return "";
+            }
+            function fallbackMarkdownImage(alt,target){
+                var parsed=parseImageTarget(target);
+                var src=safeImageUrl(parsed.href);
+                if(!src)return esc(alt||"");
+                var title=parsed.title||alt||"";
+                return '<img class="markdown-image" data-md-image="true" src="'+esc(src)+'" alt="'+esc(alt||"")+'"'+(title?' title="'+esc(title)+'"':'')+' loading="lazy" decoding="async">';
+            }
+            function inlineText(src){
                 var out=esc(src);
                 out=out.replace(/`([^`]+)`/g,'<code>$1</code>');
                 out=out.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
                 out=out.replace(/\*([^*]+)\*/g,'<em>$1</em>');
-                out=out.replace(/\[([^\]]+)\]\(([^)]+)\)/g,function(_,text,url){
-                    var safeUrl=String(url||"").trim();
-                    if(!/^(?:[a-z][a-z0-9+.-]*:|#|\/)/i.test(safeUrl)) safeUrl="#";
-                    return '<a href="'+esc(safeUrl)+'" target="_blank" rel="noopener noreferrer">'+esc(text)+'</a>';
-                });
                 return out;
+            }
+            function inline(src){
+                var raw=String(src ?? "");
+                var out=[],last=0,re=/!\[([^\]\n]*)\]\(\s*(<[^>\n]+>|[^)\n]+)\s*\)|\[([^\]\n]+)\]\(([^)\n]+)\)/g,match;
+                while((match=re.exec(raw))){
+                    out.push(inlineText(raw.slice(last,match.index)));
+                    if(match[1]!==undefined)out.push(fallbackMarkdownImage(match[1],match[2]));
+                    else{
+                        var safeUrl=safeLinkUrl(match[4]);
+                        out.push('<a href="'+esc(safeUrl)+'" target="_blank" rel="noopener noreferrer">'+inlineText(match[3])+'</a>');
+                    }
+                    last=re.lastIndex;
+                }
+                out.push(inlineText(raw.slice(last)));
+                return out.join("");
             }
             function flushParagraph(buf, out){
                 if(buf.length){ out.push("<p>"+inline(buf.join(" "))+"</p>"); buf.length=0; }
@@ -370,6 +410,19 @@
         .assistant .bubble hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
         .assistant .bubble a { color: var(--primary); text-decoration: none; }
         .assistant .bubble a:hover { text-decoration: underline; }
+        .bubble img.markdown-image {
+            display: block; max-width: min(100%, 420px); max-height: 420px;
+            width: auto; height: auto; object-fit: contain; margin: 10px 0;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+            cursor: zoom-in; transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+        }
+        .bubble img.markdown-image:hover {
+            transform: translateY(-1px); border-color: var(--primary); box-shadow: var(--shadow-md);
+        }
+        .user .bubble img.markdown-image {
+            border-color: rgba(255,255,255,0.32); background: rgba(255,255,255,0.14);
+        }
+        .thought-container img.markdown-image { max-width: min(100%, 360px); max-height: 320px; }
 
         .bubble-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
         .bubble-attachments img { max-width: 200px; max-height: 150px; border-radius: 8px; cursor: pointer; transition: transform 0.2s; }
@@ -4046,8 +4099,9 @@
         function buildModelsListUrl(base, type = "chat") {
             const cleanBase = String(base || "").trim().replace(/\/+$/, "");
             const url = `${cleanBase}/models`;
-            if (type === "voice" && isOpenRouterApiUrl(cleanBase)) {
-                return `${url}?output_modalities=speech`;
+            if (isOpenRouterApiUrl(cleanBase)) {
+                if (type === "voice") return `${url}?output_modalities=speech`;
+                if (type === "image") return `${url}?output_modalities=image`;
             }
             return url;
         }
@@ -5044,6 +5098,15 @@
         viewport.addEventListener("click", (e) => {
             const t = e.target;
             if (!(t instanceof Element)) return;
+            const mdImage = t.closest("img.markdown-image[data-md-image='true']");
+            if (mdImage) {
+                const src = mdImage.getAttribute("src") || "";
+                if (normalizeMarkdownImageUrl(src)) {
+                    e.preventDefault();
+                    previewMarkdownImage(src);
+                }
+                return;
+            }
             const btn = t.closest("button.copy-btn[data-code-id]");
             if (!btn) return;
             const codeId = parseInt(btn.getAttribute("data-code-id") || "", 10);
@@ -5596,9 +5659,114 @@
             // Avoid inline event handlers: we'll bind clicks via event delegation for security (and CSP-friendliness).
             return `<div class="code-block-wrapper"><div class="code-header"><span>${escapeHtml(langLabel)}${sizeHint}</span><button class="copy-btn" type="button" data-code-id="${codeId}">📋 复制</button></div><pre><code class="hljs language-${escapeHtml(lang)}">${highlighted}</code></pre></div>`;
         };
+        renderer.image = function(obj, titleArg, textArg) {
+            let href = "", title = "", text = "";
+            if (typeof obj === "object" && obj !== null) {
+                href = obj.href || obj.src || obj.url || "";
+                title = obj.title || "";
+                text = obj.text || obj.alt || "";
+            } else {
+                href = obj || "";
+                title = titleArg || "";
+                text = textArg || "";
+            }
+            return renderMarkdownImageHtml(href, text, title);
+        };
         marked.setOptions({ renderer, breaks: true, gfm: true, headerIds: false, mangle: false });
 
         function escapeHtml(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;'); }
+        const MARKDOWN_IMAGE_RE = /!\[([^\]\n]*)\]\(\s*(<[^>\n]+>|[^)\n]+)\s*\)/g;
+        function parseMarkdownImageTarget(value) {
+            let raw = String(value || "").trim();
+            let title = "";
+            const titleMatch = raw.match(/^(.+?)\s+["']([^"']*)["']\s*$/);
+            if (titleMatch) {
+                raw = titleMatch[1].trim();
+                title = titleMatch[2].trim();
+            }
+            if (raw.startsWith("<") && raw.endsWith(">")) raw = raw.slice(1, -1).trim();
+            return { href: raw, title };
+        }
+        function normalizeMarkdownImageUrl(value) {
+            let raw = String(value || "").trim();
+            if (!raw) return "";
+            raw = raw.replace(/&amp;/g, "&");
+            if (raw.startsWith("<") && raw.endsWith(">")) raw = raw.slice(1, -1).trim();
+            if (/^data:image\/(?:png|jpe?g|gif|webp|bmp|avif);base64,/i.test(raw)) return raw.replace(/\s+/g, "");
+            try {
+                const parsed = new URL(raw, window.location.href);
+                if (parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "blob:") return parsed.href;
+                if (parsed.protocol === "file:" && window.location.protocol === "file:") return parsed.href;
+            } catch (e) {}
+            return "";
+        }
+        function renderMarkdownImageHtml(href, text = "", title = "") {
+            const target = parseMarkdownImageTarget(href);
+            const safeSrc = normalizeMarkdownImageUrl(target.href);
+            const alt = String(text || "").trim();
+            if (!safeSrc) return alt ? escapeHtml(alt) : "";
+            const imageTitle = String(title || target.title || alt || "").trim();
+            return `<img class="markdown-image" data-md-image="true" src="${escapeHtml(safeSrc)}" alt="${escapeHtml(alt)}"${imageTitle ? ` title="${escapeHtml(imageTitle)}"` : ""} loading="lazy" decoding="async">`;
+        }
+        function enhanceMarkdownImages(html) {
+            const wrapper = document.createElement("div");
+            wrapper.innerHTML = String(html || "");
+            wrapper.querySelectorAll("img").forEach(img => {
+                const safeSrc = normalizeMarkdownImageUrl(img.getAttribute("src") || "");
+                if (!safeSrc) {
+                    const fallback = img.getAttribute("alt") || img.getAttribute("title") || "";
+                    img.replaceWith(document.createTextNode(fallback));
+                    return;
+                }
+                img.src = safeSrc;
+                img.classList.add("markdown-image");
+                img.dataset.mdImage = "true";
+                img.loading = "lazy";
+                img.decoding = "async";
+                if (!img.getAttribute("title") && img.getAttribute("alt")) img.title = img.getAttribute("alt");
+            });
+            return wrapper.innerHTML;
+        }
+        function renderPlainTextWithMarkdownImages(text) {
+            const raw = String(text || "");
+            let html = "", last = 0;
+            MARKDOWN_IMAGE_RE.lastIndex = 0;
+            let match;
+            while ((match = MARKDOWN_IMAGE_RE.exec(raw))) {
+                html += escapeHtml(raw.slice(last, match.index)).replace(/\n/g, "<br>");
+                html += renderMarkdownImageHtml(match[2], match[1]);
+                last = MARKDOWN_IMAGE_RE.lastIndex;
+            }
+            html += escapeHtml(raw.slice(last)).replace(/\n/g, "<br>");
+            return injectCustomEmojiMarkup(html);
+        }
+        function extractMarkdownImagesForApi(text) {
+            const raw = String(text || "");
+            const images = [];
+            let promptText = "", last = 0;
+            MARKDOWN_IMAGE_RE.lastIndex = 0;
+            let match;
+            while ((match = MARKDOWN_IMAGE_RE.exec(raw))) {
+                const before = raw.slice(last, match.index);
+                const original = match[0];
+                const alt = String(match[1] || "").trim();
+                const target = parseMarkdownImageTarget(match[2]);
+                const safeSrc = normalizeMarkdownImageUrl(target.href);
+                promptText += before;
+                if (safeSrc && isSupportedInputImageUrl(safeSrc)) {
+                    images.push({ url: safeSrc, alt });
+                    if (alt) promptText += `[图片: ${alt}]`;
+                } else {
+                    promptText += original;
+                }
+                last = MARKDOWN_IMAGE_RE.lastIndex;
+            }
+            promptText += raw.slice(last);
+            return {
+                text: promptText.replace(/\n{3,}/g, "\n\n").trim(),
+                images
+            };
+        }
         function getEmojiDefinitionById(id) {
             const key = String(id || "").trim();
             return EMOJI_BY_ID.get(key) || null;
@@ -5752,13 +5920,14 @@ ${packLines}`;
             try {
                 const html = marked.parse(raw);
                 if (window.DOMPurify && typeof DOMPurify.sanitize === "function") {
-                    return injectCustomEmojiMarkup(DOMPurify.sanitize(html, {
+                    const cleanHtml = DOMPurify.sanitize(html, {
                         USE_PROFILES: { html: true },
-                        ADD_TAGS: ["details", "summary", "button"],
-                        ADD_ATTR: ["target", "rel", "data-code-id"],
+                        ADD_TAGS: ["details", "summary", "button", "img"],
+                        ADD_ATTR: ["target", "rel", "data-code-id", "src", "alt", "title", "class", "loading", "decoding", "data-md-image"],
                         // Keep markdown powerful but block high-risk HTML vectors.
-                        FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "svg", "math", "img", "video", "audio", "form", "input", "textarea", "select", "option"]
-                    }));
+                        FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "svg", "math", "video", "audio", "form", "input", "textarea", "select", "option"]
+                    });
+                    return injectCustomEmojiMarkup(enhanceMarkdownImages(cleanHtml));
                 }
                 // Safe fallback: show plain text if sanitizer isn't available.
                 return injectCustomEmojiMarkup(`<pre class="raw-text">${escapeHtml(raw)}</pre>`);
@@ -5806,6 +5975,12 @@ ${packLines}`;
             if(!s||s==='[IMAGE_DATA_STRIPPED]')return;
             if(!isSafeAttachmentUrl(s))return;
             document.getElementById('image-modal-img').src=s;
+            document.getElementById('image-modal').classList.add('active');
+        }
+        function previewMarkdownImage(s){
+            const safeSrc=normalizeMarkdownImageUrl(s);
+            if(!safeSrc)return;
+            document.getElementById('image-modal-img').src=safeSrc;
             document.getElementById('image-modal').classList.add('active');
         }
         function closeImageModal(){document.getElementById('image-modal').classList.remove('active');document.getElementById('image-modal-img').src='';}
@@ -6099,6 +6274,18 @@ ${packLines}`;
                     }
                 });
             }
+
+            const choices = Array.isArray(payload?.choices) ? payload.choices : [];
+            choices.forEach(choice => {
+                const message = choice?.message || {};
+                const messageImages = Array.isArray(message?.images) ? message.images : [];
+                messageImages.forEach((img, idx) => {
+                    pushImage(
+                        img?.image_url?.url || img?.image_url || img?.url || img?.data || img?.base64,
+                        img?.name || `generated-${list.length + idx + 1}.png`
+                    );
+                });
+            });
 
             pushImage(payload?.b64_json);
             pushImage(payload?.url);
@@ -6606,6 +6793,43 @@ ${packLines}`;
         }
 
         async function requestImageGenerationJson({ endpoint, apiKey, model, prompt, inputImages, signal }) {
+            if (isOpenRouterApiUrl(endpoint)) {
+                const normalizedInputs = normalizeInputImages(inputImages);
+                if (inputImages?.length && normalizedInputs.length === 0) {
+                    throw new Error("参考图格式无效：仅支持 http/https 或 data:image base64");
+                }
+                const content = [];
+                normalizedInputs.forEach(img => {
+                    content.push({
+                        type: "image_url",
+                        image_url: { url: img.data }
+                    });
+                });
+                content.push({
+                    type: "text",
+                    text: prompt
+                });
+                const chatEndpoint = endpoint.replace(/\/images\/(generations|edits)\/?$/i, "/chat/completions").replace(/\/+$/, "");
+                const payload = {
+                    model,
+                    messages: [{ role: "user", content }],
+                    modalities: ["image", "text"]
+                };
+                const response = await fetch(chatEndpoint, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(payload),
+                    signal
+                });
+                const data = await parseResponseAsJson(response);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(data).substring(0, 180)}`);
+                const images = extractImagesFromApiResponse(data);
+                if (images.length > 0) return images;
+                throw new Error(`OpenRouter 绘图接口未返回可解析图像: ${JSON.stringify(data).substring(0, 260)}`);
+            }
             const basePayload = { model, prompt, n: 1 };
             const normalizedInputs = normalizeInputImages(inputImages);
             if (inputImages?.length && normalizedInputs.length === 0) {
@@ -6758,7 +6982,7 @@ ${packLines}`;
             const sourceImages = normalizeInputImages(
                 (attachments || []).filter(a => a.type === "image" && a.data && a.data !== "[IMAGE_DATA_STRIPPED]")
             );
-            const shouldSkipEditEndpoint = isApiMartEndpoint(generationApi) || isApiMartEndpoint(editApi);
+            const shouldSkipEditEndpoint = isApiMartEndpoint(generationApi) || isApiMartEndpoint(editApi) || isOpenRouterApiUrl(generationApi) || isOpenRouterApiUrl(editApi);
 
             if (sourceImages.length > 0) {
                 if (shouldSkipEditEndpoint) {
@@ -8929,17 +9153,20 @@ ${packLines}`;
             const hasFile=msg.attachments?.some(a=>a.type==='file');
             const hasProj=msg.attachments?.some(a=>a.type==='project');
             const emojiText=replaceCustomEmojiTokens(msg.content||"", emoji => emoji?.label || "");
-            if(!hasImg&&!hasFile&&!hasProj)return emojiText;
-            let text=emojiText;
+            const mdImages=extractMarkdownImagesForApi(emojiText);
+            const hasMdImg=mdImages.images.length>0;
+            if(!hasImg&&!hasFile&&!hasProj&&!hasMdImg)return emojiText;
+            let text=hasMdImg?mdImages.text:emojiText;
             if(hasFile){
                 text+='\n\n'+msg.attachments.filter(a=>a.type==='file').map(a=>`📄 文件: ${a.name}\n\`\`\`\n${a.data}\n\`\`\``).join('\n\n');
             }
             if(hasProj){
                 text+='\n\n'+msg.attachments.filter(a=>a.type==='project').map(a=>a.data).join('\n\n');
             }
-            if(!hasImg)return text;
+            if(!hasImg&&!hasMdImg)return text;
             const parts=[{type:"text",text}];
-            msg.attachments.filter(a=>a.type==='image'&&a.data&&a.data!=='[IMAGE_DATA_STRIPPED]').forEach(a=>{parts.push({type:"image_url",image_url:{url:a.data}});});
+            mdImages.images.forEach(img=>{parts.push({type:"image_url",image_url:{url:img.url}});});
+            (msg.attachments||[]).filter(a=>a.type==='image'&&a.data&&a.data!=='[IMAGE_DATA_STRIPPED]').forEach(a=>{parts.push({type:"image_url",image_url:{url:a.data}});});
             return parts;
         }
 
@@ -9007,7 +9234,7 @@ ${packLines}`;
                 if(attEl)bubble.insertBefore(attEl,bubble.firstChild);
             }else{
                 appendBubbleAttachments(bubble,msg.attachments,{allowImageDownload:false});
-                if(msg.content){const t=document.createElement('span');t.innerHTML=injectCustomEmojiMarkup(escapeHtml(msg.content).replace(/\n/g,'<br>'));bubble.appendChild(t);}
+                if(msg.content){const t=document.createElement('div');t.className='message-text';t.innerHTML=renderPlainTextWithMarkdownImages(msg.content);bubble.appendChild(t);}
             }
             group.appendChild(bubble);
 
@@ -9833,6 +10060,8 @@ ${packLines}`;
 
             if(pendingAttachments.some(a=>a.type==='image')&&!isCurrentModelVision())
                 showToast("⚠️ 当前模型可能不支持图片","warning");
+            if(extractMarkdownImagesForApi(text).images.length>0&&!isCurrentModelVision())
+                showToast("⚠️ 当前模型可能不支持 Markdown 图片输入","warning");
 
             const userMsg={role:"user",content:text,attachments:pendingAttachments.length>0?[...pendingAttachments]:undefined,timestamp:Date.now()};
             history.push(userMsg);
@@ -10341,6 +10570,28 @@ ${packLines}`;
             renderChatThreadBar();
             showToast("当前会话已清空");
         }
+        function escapeMarkdownImageAlt(value){
+            return String(value || "image").replace(/[\[\]\r\n]+/g, " ").replace(/\s+/g, " ").trim() || "image";
+        }
+        function formatMarkdownImageSrc(src){
+            const safeSrc=normalizeMarkdownImageUrl(src);
+            if(!safeSrc)return "";
+            const cleaned=safeSrc.replace(/>/g,"%3E");
+            return /[\s()]/.test(cleaned)?`<${cleaned}>`:cleaned;
+        }
+        function imageAttachmentToMarkdown(att){
+            if(!att || att.type!=="image" || !att.data || att.data==="[IMAGE_DATA_STRIPPED]")return "";
+            const src=formatMarkdownImageSrc(att.data);
+            if(!src)return "";
+            return `![${escapeMarkdownImageAlt(att.name || "image")}](${src})`;
+        }
+        function attachmentNamesForMarkdown(attachments, includeImages=false){
+            return (attachments || [])
+                .filter(a=>includeImages || a.type!=="image")
+                .map(a=>a.type==='project'?`${a.name} (${a.fileCount||0} files)`:(a.name||a.type))
+                .filter(Boolean)
+                .join(', ');
+        }
         function exportChat(){
             const history=getPanelHistory(currentPanel);
             if(!history.length){showToast("No chat history to export");return;}
@@ -10352,14 +10603,23 @@ ${packLines}`;
                 if(msg.role==='user'){
                     md+=`## User (${time})\n\n${msg.content||''}\n`;
                     if(msg.attachments?.length){
-                        const names=msg.attachments.map(a=>a.type==='project'?`${a.name} (${a.fileCount||0} files)`:(a.name||a.type)).join(', ');
-                        md+=`\nAttachments: ${names}\n`;
+                        const imageLines=msg.attachments.map(imageAttachmentToMarkdown).filter(Boolean);
+                        if(imageLines.length)md+=`\n${imageLines.join('\n\n')}\n`;
+                        const names=attachmentNamesForMarkdown(msg.attachments);
+                        if(names)md+=`\nAttachments: ${names}\n`;
                     }
                     md+=`\n---\n\n`;
                 }else{
                     md+=`## Assistant (${time})${msg.elapsed?` ${(msg.elapsed/1000).toFixed(1)}s`:''}\n\n`;
                     if(msg.reasoning)md+=`<details><summary>Reasoning</summary>\n\n${msg.reasoning}\n\n</details>\n\n`;
-                    md+=`${msg.content||''}\n\n---\n\n`;
+                    md+=`${msg.content||''}\n`;
+                    if(msg.attachments?.length){
+                        const imageLines=msg.attachments.map(imageAttachmentToMarkdown).filter(Boolean);
+                        if(imageLines.length)md+=`\n${imageLines.join('\n\n')}\n`;
+                        const names=attachmentNamesForMarkdown(msg.attachments);
+                        if(names)md+=`\nAttachments: ${names}\n`;
+                    }
+                    md+=`\n---\n\n`;
                 }
             });
             const blob=new Blob([md],{type:"text/markdown;charset=utf-8"});
