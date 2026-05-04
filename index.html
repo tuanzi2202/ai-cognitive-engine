@@ -78,6 +78,53 @@
             function flushParagraph(buf, out){
                 if(buf.length){ out.push("<p>"+inline(buf.join(" "))+"</p>"); buf.length=0; }
             }
+            function splitTableRow(row){
+                var raw=String(row||"").trim();
+                if(raw.charAt(0)==="|")raw=raw.slice(1);
+                if(raw.charAt(raw.length-1)==="|")raw=raw.slice(0,-1);
+                var cells=[],cell="",escaped=false;
+                for(var i=0;i<raw.length;i++){
+                    var ch=raw.charAt(i);
+                    if(escaped){cell+=ch;escaped=false;continue;}
+                    if(ch==="\\"){escaped=true;cell+=ch;continue;}
+                    if(ch==="|"){cells.push(cell.trim());cell="";continue;}
+                    cell+=ch;
+                }
+                cells.push(cell.trim());
+                return cells;
+            }
+            function isTableDivider(line){
+                var cells=splitTableRow(line);
+                return cells.length>1&&cells.every(function(cell){return /^:?-{3,}:?$/.test(cell.replace(/\s+/g,""));});
+            }
+            function tableAlignAttr(cell){
+                var marker=String(cell||"").replace(/\s+/g,"");
+                if(/^:-+:$/.test(marker))return ' style="text-align:center"';
+                if(/^-+:$/.test(marker))return ' style="text-align:right"';
+                if(/^:-+$/.test(marker))return ' style="text-align:left"';
+                return "";
+            }
+            function renderTable(lines,start){
+                if(start+1>=lines.length||!isTableDivider(lines[start+1]))return null;
+                var headers=splitTableRow(lines[start]);
+                var aligns=splitTableRow(lines[start+1]);
+                if(headers.length<2||aligns.length<2)return null;
+                var colCount=Math.max(headers.length,aligns.length);
+                var html=["<table><thead><tr>"];
+                for(var h=0;h<colCount;h++)html.push("<th"+tableAlignAttr(aligns[h]||"")+">"+inline(headers[h]||"")+"</th>");
+                html.push("</tr></thead><tbody>");
+                var idx=start+2;
+                while(idx<lines.length&&lines[idx].trim()&&splitTableRow(lines[idx]).length>1){
+                    if(isTableDivider(lines[idx]))break;
+                    var cells=splitTableRow(lines[idx]);
+                    html.push("<tr>");
+                    for(var c=0;c<colCount;c++)html.push("<td"+tableAlignAttr(aligns[c]||"")+">"+inline(cells[c]||"")+"</td>");
+                    html.push("</tr>");
+                    idx++;
+                }
+                html.push("</tbody></table>");
+                return {html:html.join(""),next:idx};
+            }
             function parse(md){
                 var text=String(md ?? "").replace(/\r\n/g,"\n");
                 var lines=text.split("\n"), out=[], para=[], inCode=false, code=[], lang="";
@@ -101,6 +148,8 @@
                     if(!line.trim()){ flushParagraph(para,out); continue; }
                     var h=line.match(/^(#{1,6})\s+(.*)$/);
                     if(h){ flushParagraph(para,out); out.push("<h"+h[1].length+">"+inline(h[2])+"</h"+h[1].length+">"); continue; }
+                    var table=renderTable(lines,i);
+                    if(table){ flushParagraph(para,out); out.push(table.html); i=table.next-1; continue; }
                     var li=line.match(/^\s*[-*]\s+(.*)$/);
                     if(li){ flushParagraph(para,out); out.push("<ul><li>"+inline(li[1])+"</li></ul>"); continue; }
                     para.push(line.trim());
@@ -402,9 +451,12 @@
             border-left: 3px solid var(--primary); margin: 10px 0; padding: 8px 14px;
             background: var(--thought-bg); border-radius: 4px; color: var(--text-secondary);
         }
-        .assistant .bubble table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
-        .assistant .bubble th, .assistant .bubble td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
-        .assistant .bubble th { background: var(--thought-bg); font-weight: 600; }
+        .bubble table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; overflow: hidden; border-radius: 8px; }
+        .bubble th, .bubble td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; vertical-align: top; }
+        .bubble th { background: var(--thought-bg); font-weight: 600; }
+        .user .bubble table { color: var(--user-bubble-text); }
+        .user .bubble th, .user .bubble td { border-color: rgba(255,255,255,0.35); }
+        .user .bubble th { background: rgba(255,255,255,0.14); }
         .assistant .bubble strong { color: var(--primary-dark); }
         [data-theme="dark"] .assistant .bubble strong { color: var(--primary-light); }
         .assistant .bubble hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
@@ -5727,7 +5779,45 @@
             });
             return wrapper.innerHTML;
         }
-        function renderPlainTextWithMarkdownImages(text) {
+        function splitMarkdownTableRow(row) {
+            let raw = String(row || "").trim();
+            if (raw.startsWith("|")) raw = raw.slice(1);
+            if (raw.endsWith("|")) raw = raw.slice(0, -1);
+            const cells = [];
+            let cell = "", escaped = false;
+            for (const ch of raw) {
+                if (escaped) {
+                    cell += ch === "|" ? "|" : `\\${ch}`;
+                    escaped = false;
+                    continue;
+                }
+                if (ch === "\\") {
+                    escaped = true;
+                    continue;
+                }
+                if (ch === "|") {
+                    cells.push(cell.trim());
+                    cell = "";
+                    continue;
+                }
+                cell += ch;
+            }
+            if (escaped) cell += "\\";
+            cells.push(cell.trim());
+            return cells;
+        }
+        function isMarkdownTableDivider(line) {
+            const cells = splitMarkdownTableRow(line);
+            return cells.length > 1 && cells.every(cell => /^:?-{3,}:?$/.test(String(cell || "").replace(/\s+/g, "")));
+        }
+        function getMarkdownTableAlignStyle(marker) {
+            const value = String(marker || "").replace(/\s+/g, "");
+            if (/^:-+:$/.test(value)) return ' style="text-align:center"';
+            if (/^-+:$/.test(value)) return ' style="text-align:right"';
+            if (/^:-+$/.test(value)) return ' style="text-align:left"';
+            return "";
+        }
+        function renderInlinePlainMarkdown(text) {
             const raw = String(text || "");
             let html = "", last = 0;
             MARKDOWN_IMAGE_RE.lastIndex = 0;
@@ -5738,6 +5828,47 @@
                 last = MARKDOWN_IMAGE_RE.lastIndex;
             }
             html += escapeHtml(raw.slice(last)).replace(/\n/g, "<br>");
+            return html;
+        }
+        function renderPlainMarkdownTable(lines, start) {
+            if (start + 1 >= lines.length || !isMarkdownTableDivider(lines[start + 1])) return null;
+            const headers = splitMarkdownTableRow(lines[start]);
+            const aligns = splitMarkdownTableRow(lines[start + 1]);
+            if (headers.length < 2 || aligns.length < 2) return null;
+            const colCount = Math.max(headers.length, aligns.length);
+            let html = "<table><thead><tr>";
+            for (let i = 0; i < colCount; i++) {
+                html += `<th${getMarkdownTableAlignStyle(aligns[i])}>${renderInlinePlainMarkdown(headers[i] || "")}</th>`;
+            }
+            html += "</tr></thead><tbody>";
+            let idx = start + 2;
+            while (idx < lines.length && lines[idx].trim() && splitMarkdownTableRow(lines[idx]).length > 1) {
+                if (isMarkdownTableDivider(lines[idx])) break;
+                const cells = splitMarkdownTableRow(lines[idx]);
+                html += "<tr>";
+                for (let i = 0; i < colCount; i++) {
+                    html += `<td${getMarkdownTableAlignStyle(aligns[i])}>${renderInlinePlainMarkdown(cells[i] || "")}</td>`;
+                }
+                html += "</tr>";
+                idx++;
+            }
+            html += "</tbody></table>";
+            return { html, next: idx };
+        }
+        function renderPlainTextWithMarkdownImages(text) {
+            const lines = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+            let html = "";
+            for (let i = 0; i < lines.length; i++) {
+                const table = renderPlainMarkdownTable(lines, i);
+                if (table) {
+                    html += table.html;
+                    i = table.next - 1;
+                    if (i < lines.length - 1) html += "<br>";
+                    continue;
+                }
+                html += renderInlinePlainMarkdown(lines[i]);
+                if (i < lines.length - 1) html += "<br>";
+            }
             return injectCustomEmojiMarkup(html);
         }
         function extractMarkdownImagesForApi(text) {
@@ -5922,8 +6053,8 @@ ${packLines}`;
                 if (window.DOMPurify && typeof DOMPurify.sanitize === "function") {
                     const cleanHtml = DOMPurify.sanitize(html, {
                         USE_PROFILES: { html: true },
-                        ADD_TAGS: ["details", "summary", "button", "img"],
-                        ADD_ATTR: ["target", "rel", "data-code-id", "src", "alt", "title", "class", "loading", "decoding", "data-md-image"],
+                        ADD_TAGS: ["details", "summary", "button", "img", "table", "thead", "tbody", "tr", "th", "td"],
+                        ADD_ATTR: ["target", "rel", "data-code-id", "src", "alt", "title", "class", "loading", "decoding", "data-md-image", "align"],
                         // Keep markdown powerful but block high-risk HTML vectors.
                         FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "svg", "math", "video", "audio", "form", "input", "textarea", "select", "option"]
                     });
